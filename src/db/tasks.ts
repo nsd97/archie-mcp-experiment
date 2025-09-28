@@ -23,6 +23,7 @@ export type Task = {
   claimed_at?: string;
   due_date?: string;
   completed_at?: string;
+  completed_by?: string;
   sla?: string;
   visibility_group?: string;
   inputs?: Record<string, unknown>;
@@ -160,17 +161,23 @@ export async function queryUnclaimedTasks(listing_id: string, claimStatusPrefix 
 
 // TaskCategoryIndex: PK task_category#is_stray, SK created_at
 export async function queryTasksByCategory(categoryKey: string, createdFrom = "", limit = 50): Promise<Task[]> {
-  const res = await ddb.send(
-    new QueryCommand({
-      TableName: TASKS_TABLE,
-      IndexName: "TaskCategoryIndex",
-      KeyConditionExpression: "#pk = :pk AND begins_with(#created, :from)",
-      ExpressionAttributeNames: { "#pk": "task_category#is_stray", "#created": "created_at" },
-      ExpressionAttributeValues: { ":pk": categoryKey, ":from": createdFrom },
-      Limit: limit,
-      ScanIndexForward: false,
-    })
-  );
+  const hasFrom = typeof createdFrom === "string" && createdFrom.length > 0;
+  const params: any = {
+    TableName: TASKS_TABLE,
+    IndexName: "TaskCategoryIndex",
+    ExpressionAttributeNames: { "#pk": "task_category#is_stray" },
+    ExpressionAttributeValues: { ":pk": categoryKey },
+    Limit: limit,
+    ScanIndexForward: false,
+  };
+  if (hasFrom) {
+    params.KeyConditionExpression = "#pk = :pk AND begins_with(#created, :from)";
+    params.ExpressionAttributeNames["#created"] = "created_at";
+    params.ExpressionAttributeValues[":from"] = createdFrom;
+  } else {
+    params.KeyConditionExpression = "#pk = :pk";
+  }
+  const res = await ddb.send(new QueryCommand(params));
   return (res.Items as Task[]) ?? [];
 }
 
@@ -211,6 +218,28 @@ export async function unclaimTask(task: Task): Promise<Task> {
   } as Task;
   const toPut: any = { ...updated };
   delete toPut.assigned_to;
+  if (updated.listing_id && updated.status) {
+    toPut["listing_id#status"] = `${updated.listing_id}#${updated.status}`;
+  }
+  toPut["priority#due_date"] = `${updated.priority ?? 0}#${updated.due_date ?? ""}`;
+  toPut["status#priority"] = `${updated.status}#${updated.priority ?? 0}`;
+  toPut["task_category#is_stray"] = `${updated.task_category ?? "uncategorized"}#${updated.is_stray ? 1 : 0}`;
+  await ddb.send(new PutCommand({ TableName: TASKS_TABLE, Item: toPut }));
+  return updated;
+}
+
+export async function completeTask(task: Task, completedBy: string): Promise<Task> {
+  const updated: Task = {
+    ...task,
+    status: "DONE",
+    completed_at: nowIso(),
+    completed_by: completedBy,
+    updated_at: nowIso(),
+  } as Task;
+  const toPut: any = { ...updated };
+  if (updated.assigned_to?.userId) {
+    toPut["assigned_to.userId"] = updated.assigned_to.userId;
+  }
   if (updated.listing_id && updated.status) {
     toPut["listing_id#status"] = `${updated.listing_id}#${updated.status}`;
   }
