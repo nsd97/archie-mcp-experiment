@@ -163,4 +163,41 @@ export default async function listingsRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: "Internal Server Error" });
     }
   });
+
+  app.get("/v1/operations/board", async (_req, reply) => {
+    try {
+      async function getByStatus(status: string): Promise<Listing[]> {
+        const items = await queryListingsByStatus(status, "", 1000);
+        if (items.length > 0) return items;
+        const fallback = await queryListingsByCreatedAt("", 1000);
+        return fallback.filter((l) => (l.status || "").toLowerCase() === status);
+      }
+
+      const [newItems, inProgressItems, completedItems] = await Promise.all([
+        getByStatus("new"),
+        getByStatus("in_progress"),
+        getByStatus("completed"),
+      ]);
+
+      const columns = {
+        new: newItems.map((l) => ({ id: l.listing_id, address: l.address_string || "", assignee: l.assignee || "", dueDate: l.due_date || null })),
+        inProgress: inProgressItems.map((l) => ({ id: l.listing_id, address: l.address_string || "", assignee: l.assignee || "", dueDate: l.due_date || null, progress: (l as any).progress ?? 0 })),
+        completed: completedItems.map((l) => ({ id: l.listing_id, address: l.address_string || "", assignee: l.assignee || "", completedDate: l.completed_at || l.updated_at })),
+      } as const;
+
+      const now = Date.now();
+      const overdueCount = [...newItems, ...inProgressItems].filter((l) => !!l.due_date && new Date(l.due_date as string).getTime() < now).length;
+      const summary = {
+        totalNew: columns.new.length,
+        totalInProgress: columns.inProgress.length,
+        totalCompleted: columns.completed.length,
+        totalOverdue: overdueCount,
+      };
+
+      return reply.send({ columns, summary });
+    } catch (err: any) {
+      (reply as any).request?.log?.error?.({ err }, "Failed to get board view");
+      return reply.code(500).send({ error: "Internal Server Error" });
+    }
+  });
 }

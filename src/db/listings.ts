@@ -128,16 +128,22 @@ export async function queryListingsByAddress(addressPrefix = "", limit = 50): Pr
 
 // CreatedAtIndex: PK GLOBAL, SK created_at
 export async function queryListingsByCreatedAt(createdAtFrom = "", limit = 50): Promise<Listing[]> {
-  const res = await ddb.send(
-    new QueryCommand({
-      TableName: LISTINGS_TABLE,
-      IndexName: "CreatedAtIndex",
-      KeyConditionExpression: "#pk = :global AND begins_with(#created, :from)",
-      ExpressionAttributeNames: { "#pk": "GLOBAL", "#created": "created_at" },
-      ExpressionAttributeValues: { ":global": "GLOBAL", ":from": createdAtFrom },
-      Limit: limit,
-      ScanIndexForward: false,
-    })
-  );
+  const hasFrom = typeof createdAtFrom === "string" && createdAtFrom.length > 0;
+  const params: any = {
+    TableName: LISTINGS_TABLE,
+    IndexName: "CreatedAtIndex",
+    ExpressionAttributeNames: { "#pk": "GLOBAL" },
+    ExpressionAttributeValues: { ":global": "GLOBAL" },
+    Limit: limit,
+    ScanIndexForward: false,
+  };
+  if (hasFrom) {
+    params.KeyConditionExpression = "#pk = :global AND begins_with(#created, :from)";
+    params.ExpressionAttributeNames["#created"] = "created_at";
+    params.ExpressionAttributeValues[":from"] = createdAtFrom;
+  } else {
+    params.KeyConditionExpression = "#pk = :global";
+  }
+  const res = await ddb.send(new QueryCommand(params));
   return (res.Items as Listing[]) ?? [];
 }
