@@ -11,7 +11,12 @@
     "db:bootstrap": "ts-node scripts/bootstrap-localstack-ddb.ts",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "openapi": "node -e \"console.log(JSON.stringify(require('./dist/openapi.js').buildOpenApiSpec()))\" > openapi.json"
+    "openapi": "node -e \"console.log(JSON.stringify(require('./dist/openapi.js').buildOpenApiSpec()))\" > openapi.json",
+    "infra:up": "docker compose up -d localstack",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f localstack",
+    "infra:init": "NODE_ENV=local ts-node scripts/infra-init.ts",
+    "infra:verify": "NODE_ENV=local ts-node scripts/infra-verify.ts"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +28,7 @@
   "prettier": "^3.3.3",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.896.0",
+    "@aws-sdk/client-s3": "^3.896.0",
     "@aws-sdk/lib-dynamodb": "^3.896.0",
     "dotenv": "^17.2.2",
     "fastify": "^4.28.1",

@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  localstack:
+    image: localstack/localstack:3
+    container_name: archieos-localstack
+    environment:
+      - SERVICES=s3,dynamodb
+      - DEBUG=0
+      - LS_LOG=info
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - HOSTNAME=localhost
+      - LOCALSTACK_HOST=localhost
+    ports:
+      - "4566:4566"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"

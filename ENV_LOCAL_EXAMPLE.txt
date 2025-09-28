@@ -1,0 +1,9 @@
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+LOCALSTACK_ENDPOINT=http://localhost:4566
+ENTITIES_TABLE=entities
+LISTINGS_TABLE=listings
+TASKS_TABLE=tasks
+AUDIT_LOG_TABLE=audit_log
+ARTIFACTS_BUCKET=archieos-artifacts
