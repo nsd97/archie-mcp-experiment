@@ -1,5 +1,5 @@
 import { ddb } from "./client";
-import { GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { nowIso } from "@services/time";
 import { generateUlid } from "@services/ids";
 
@@ -171,8 +171,8 @@ export async function queryTasksByCategory(categoryKey: string, createdFrom = ""
     ScanIndexForward: false,
   };
   if (hasFrom) {
-    params.KeyConditionExpression = "#pk = :pk AND begins_with(#created, :from)";
     params.ExpressionAttributeNames["#created"] = "created_at";
+    params.KeyConditionExpression = "#pk = :pk AND #created >= :from";
     params.ExpressionAttributeValues[":from"] = createdFrom;
   } else {
     params.KeyConditionExpression = "#pk = :pk";
@@ -248,4 +248,8 @@ export async function completeTask(task: Task, completedBy: string): Promise<Tas
   toPut["task_category#is_stray"] = `${updated.task_category ?? "uncategorized"}#${updated.is_stray ? 1 : 0}`;
   await ddb.send(new PutCommand({ TableName: TASKS_TABLE, Item: toPut }));
   return updated;
+}
+
+export async function deleteTaskById(task_id: string): Promise<void> {
+  await ddb.send(new DeleteCommand({ TableName: TASKS_TABLE, Key: { task_id } }));
 }

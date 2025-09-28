@@ -41,7 +41,10 @@ function toApiTask(t: Task) {
 
 export default async function tasksRoutes(app: FastifyInstance) {
   app.get("/v1/operations/my-tasks", async (req, reply) => {
-    const userId = (req.query as any)?.userId || (req.headers["x-user-id"] as string) || "user-xyz";
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId) {
+      return reply.code(401).send({ error: "Missing authenticated user" });
+    }
     const mod = await import("../db/tasks");
     const tasks: Task[] = await mod.queryMyTasks(userId, "", 1000);
     const byListing = new Map<string, Task[]>();
@@ -54,12 +57,10 @@ export default async function tasksRoutes(app: FastifyInstance) {
     for (const [listingId, ts] of byListing) {
       const listing = await (await import("../db/listings")).getListingById(listingId);
       if (!listing) continue;
-      const earliestDue = ts.reduce<string | Date | null>((earliest, current) => {
+      const earliestDue = ts.reduce<string | null>((earliest, current) => {
         if (!current.due_date) return earliest;
         if (!earliest) return current.due_date;
-        const earliestTime = new Date(earliest).getTime();
-        const currentTime = new Date(current.due_date).getTime();
-        return currentTime < earliestTime ? current.due_date : earliest;
+        return new Date(current.due_date).getTime() < new Date(earliest).getTime() ? current.due_date : earliest;
       }, null);
       listings.push({
         listingId,
@@ -69,14 +70,24 @@ export default async function tasksRoutes(app: FastifyInstance) {
         agent: listing.agent_id || "",
         dueDate: earliestDue,
         taskCount: ts.length,
-        tasks: ts.map((t) => ({
-          taskId: t.task_id,
-          title: t.name,
-          sla: 0,
-          dueDate: t.due_date || null,
-          priority: ((t.priority ?? 0) >= 8 ? "HIGH" : (t.priority ?? 0) >= 4 ? "MEDIUM" : "LOW"),
-          status: t.status?.toUpperCase() === "DONE" ? "COMPLETED" : t.status?.toUpperCase() === "CLAIMED" ? "IN_PROGRESS" : "ASSIGNED",
-        })),
+        tasks: ts.map((t) => {
+          const status = toApiStatus(t.status);
+          return {
+            taskId: t.task_id,
+            title: t.name,
+            sla: 0,
+            dueDate: t.due_date || null,
+            priority: ((t.priority ?? 0) >= 8 ? "HIGH" : (t.priority ?? 0) >= 4 ? "MEDIUM" : "LOW"),
+            status:
+              status === "completed"
+                ? "COMPLETED"
+                : status === "cancelled"
+                ? "CANCELLED"
+                : status === "claimed" || status === "in_progress"
+                ? "IN_PROGRESS"
+                : "ASSIGNED",
+          };
+        }),
       });
     }
     const totalTasks = tasks.length;
