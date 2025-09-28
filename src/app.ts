@@ -3,10 +3,14 @@ import dotenv from 'dotenv';
 import listingsRoutes from './routes/listings';
 import queueRoutes from './routes/queue';
 import tasksRoutes from './routes/tasks';
+import debugUser from './plugins/debugUser';
+import debugRoutes from './routes/debug';
 
 dotenv.config();
 
 const app = Fastify({ logger: true });
+app.register(debugUser);
+app.register(debugRoutes);
 app.register(listingsRoutes);
 app.register(queueRoutes);
 app.register(tasksRoutes);
