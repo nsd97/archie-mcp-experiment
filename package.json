@@ -16,7 +16,8 @@
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f localstack",
     "infra:init": "NODE_ENV=local ts-node scripts/infra-init.ts",
-    "infra:verify": "NODE_ENV=local ts-node scripts/infra-verify.ts"
+    "infra:verify": "NODE_ENV=local ts-node scripts/infra-verify.ts",
+    "seed": "NODE_ENV=local ts-node scripts/seed.ts"
   },
   "keywords": [],
   "author": "",
