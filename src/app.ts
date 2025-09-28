@@ -5,12 +5,14 @@ import queueRoutes from './routes/queue';
 import tasksRoutes from './routes/tasks';
 import debugUser from './plugins/debugUser';
 import debugRoutes from './routes/debug';
+import openapiRoute from './routes/openapi';
 
 dotenv.config();
 
 const app = Fastify({ logger: true });
 app.register(debugUser);
 app.register(debugRoutes);
+app.register(openapiRoute);
 app.register(listingsRoutes);
 app.register(queueRoutes);
 app.register(tasksRoutes);
