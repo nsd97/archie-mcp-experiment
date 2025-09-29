@@ -1,3 +1,0 @@
-[submodule "packages/frontend"]
-	path = packages/frontend
-	url = https://github.com/Casakit/operations-center.git
