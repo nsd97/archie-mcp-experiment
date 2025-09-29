@@ -20,6 +20,10 @@ export async function exchangeSlackCode(code: string, redirectUri?: string): Pro
   const params = new URLSearchParams();
   params.set('code', code);
   params.set('client_id', SLACK_CLIENT_ID);
+  params.set('client_secret', SLACK_CLIENT_SECRET);
+  if (redirectUri) {
+    params.set('redirect_uri', redirectUri);
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   let res: Response;

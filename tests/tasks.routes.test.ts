@@ -52,45 +52,80 @@ beforeAll(async () => {
   const listingsTable = process.env.LISTINGS_TABLE;
   const tasksTable = process.env.TASKS_TABLE;
 
-  const ensureTable = async (commandInput: any) => {
-    try {
-      await ddbClient.send(new CreateTableCommand(commandInput));
-    } catch (err: any) {
-      if (err?.name !== "ResourceInUseException") throw err;
-    }
-  };
+// tests/tasks.routes.test.ts
 
-  await ensureTable({
-    TableName: listingsTable,
-    BillingMode: "PAY_PER_REQUEST",
-    AttributeDefinitions: [
-      { AttributeName: "listing_id", AttributeType: "S" },
-      { AttributeName: "status", AttributeType: "S" },
-      { AttributeName: "GLOBAL", AttributeType: "S" },
-      { AttributeName: "created_at", AttributeType: "S" },
-    ],
-    KeySchema: [{ AttributeName: "listing_id", KeyType: "HASH" }],
-    GlobalSecondaryIndexes: [
-      {
-        IndexName: "StatusIndex",
-        KeySchema: [
-          { AttributeName: "status", KeyType: "HASH" },
-          { AttributeName: "listing_id", KeyType: "RANGE" },
-        ],
-        Projection: { ProjectionType: "ALL" },
-      },
-      {
-        IndexName: "CreatedAtIndex",
-        KeySchema: [
-          { AttributeName: "GLOBAL", KeyType: "HASH" },
-          { AttributeName: "created_at", KeyType: "RANGE" },
-        ],
-        Projection: { ProjectionType: "ALL" },
-      },
-    ],
-  });
-  createdTables.push(listingsTable!);
+// Track only tables we truly create
+const createdTables: string[] = [];
 
+const ensureTable = async (commandInput: any) => {
+  try {
+    await ddbClient.send(new CreateTableCommand(commandInput));
+    // Only record if we actually created it
+    createdTables.push(commandInput.TableName as string);
+    return true;
+  } catch (err: any) {
+    // Table already exists—nothing to record
+    if (err?.name === "ResourceInUseException") return false;
+    throw err;
+  }
+};
+
+await ensureTable({
+  TableName: listingsTable,
+  BillingMode: "PAY_PER_REQUEST",
+  AttributeDefinitions: [
+    { AttributeName: "listing_id", AttributeType: "S" },
+    { AttributeName: "status",     AttributeType: "S" },
+    { AttributeName: "GLOBAL",     AttributeType: "S" },
+    { AttributeName: "created_at", AttributeType: "S" },
+  ],
+  KeySchema: [{ AttributeName: "listing_id", KeyType: "HASH" }],
+  GlobalSecondaryIndexes: [
+    {
+      IndexName: "StatusIndex",
+      KeySchema: [
+        { AttributeName: "status",     KeyType: "HASH" },
+        { AttributeName: "listing_id", KeyType: "RANGE" },
+      ],
+      Projection: { ProjectionType: "ALL" },
+    },
+    {
+      IndexName: "CreatedAtIndex",
+      KeySchema: [
+        { AttributeName: "GLOBAL",     KeyType: "HASH" },
+        { AttributeName: "created_at", KeyType: "RANGE" },
+      ],
+      Projection: { ProjectionType: "ALL" },
+    },
+  ],
+});
+
+// No more unconditional createdTables.push(listingsTable!);
+
+await ensureTable({
+  TableName: tasksTable,
+  BillingMode: "PAY_PER_REQUEST",
+  AttributeDefinitions: [
+    { AttributeName: "task_id",    AttributeType: "S" },
+    /* ... */
+  ],
+  KeySchema: [{ AttributeName: "task_id", KeyType: "HASH" }],
+});
+
+// No more createdTables.push(tasksTable!);
+
+await ensureTable({
+  TableName: process.env.ENTITIES_TABLE!,
+  BillingMode: "PAY_PER_REQUEST",
+  AttributeDefinitions: [
+    /* ... */
+  ],
+  KeySchema: [
+    /* ... */
+  ],
+});
+
+// No more createdTables.push(process.env.ENTITIES_TABLE!);
   await ensureTable({
     TableName: tasksTable,
     BillingMode: "PAY_PER_REQUEST",

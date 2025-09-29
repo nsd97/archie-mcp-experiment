@@ -45,7 +45,7 @@ services:
       - AUDIT_LOG_TABLE=${AUDIT_LOG_TABLE:-audit_log}
       - INTAKE_EVENTS_TABLE=${INTAKE_EVENTS_TABLE:-intake_events}
       - ARTIFACTS_BUCKET=${ARTIFACTS_BUCKET:-archieos-artifacts}
-      - INTAKE_QUEUE_URL=${INTAKE_QUEUE_URL:-http://sqs.us-east-1.localhost:4566/000000000000/intake-queue}
+      - INTAKE_QUEUE_URL=${INTAKE_QUEUE_URL:-http://localstack:4566/000000000000/intake-queue}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080,http://localhost}
     depends_on:
       localstack:

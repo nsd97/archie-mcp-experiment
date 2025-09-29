@@ -92,19 +92,22 @@ export default async function slackRoutes(app: FastifyInstance) {
     }
 
     // Ack immediately to avoid Slack retries
+    // Persist minimal state before acking
+    const norm = normalizeEvent(body);
+    if (norm) await ingest(norm); // ensure we’ve persisted something before acking
+
+    // Ack quickly after the durable write
     reply.send({ ok: true });
 
     // Fire-and-forget background processing
     void (async () => {
       try {
-        const norm = normalizeEvent(body);
-        if (norm) await ingest(norm);
-
+        const payload = body;
         const { classifyAndEnqueueFromSlackEvent } = await import('../services/llmClassifier');
-        const res = await classifyAndEnqueueFromSlackEvent(body);
+        const res = await classifyAndEnqueueFromSlackEvent(payload);
         if (!res?.ok) {
           const legacy = await import('../services/intakeClassifier');
-          const normalized = legacy.normalizeSlackEvent(body);
+          const normalized = legacy.normalizeSlackEvent(payload);
           if (normalized) await legacy.enqueueIntakeEvent(normalized);
         }
       } catch {

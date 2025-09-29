@@ -4,7 +4,9 @@ import { queryMyTasks, type Task } from "../db/tasks";
 import { getListingById } from "../db/listings";
 
 const myTasksQuerySchema = z.object({
-  userId: z.string().min(1, "userId is required").transform((id) => id.includes('-') ? id.replace('-', ':') : id),
+  userId: z.string().min(1, "userId is required").transform((id) =>
+    id.includes("-") ? id.replaceAll("-", ":") : id
+  ),
 });
 
 const myTasksResponseSchema = z.object({
@@ -60,15 +62,20 @@ export default async function myTasksRoutes(app: FastifyInstance) {
           priority: ((task.priority ?? 0) >= 8 ? "HIGH" : (task.priority ?? 0) >= 4 ? "MEDIUM" : "LOW"),
           status: task.status,
         }));
-
         listings.push({
-          listingId: listing ? listing.listing_id : null,
+          listingId: listing
+            ? listing.listing_id
+            : listingId === "unknown"
+              ? null
+              : listingId,
           address: listing?.address_string ?? (listingId === "unknown" ? "General" : listingId),
           listingType: listing?.type ?? null,
           status: listing?.status ?? null,
           agent: listing?.agent_id ?? null,
           dueDate: listing?.due_date ?? null,
           taskCount: tasksForListing.length,
+          tasks: tasksForListing,
+        });
           tasks: tasksForListing,
         });
       }

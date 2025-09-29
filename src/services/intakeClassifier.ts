@@ -66,7 +66,14 @@ function resolveType(body: SlackEventPayload, event: SlackEvent | undefined, isS
   if (event.type === 'app_mention') return 'app_mention';
   if (event.type === 'message') {
     const channelType = event.channel_type || (body?.channel?.id ? 'channel' : undefined);
-    if (channelType === 'channel' || !!event.channel) return 'message.channels';
+    if (channelType === 'channel' || channelType === 'group') return 'message.channels';
+    if (
+      !channelType &&
+      typeof event.channel === 'string' &&
+      (event.channel.startsWith('C') || event.channel.startsWith('G'))
+    ) {
+      return 'message.channels';
+    }
   }
   return undefined;
 }

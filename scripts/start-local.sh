@@ -6,7 +6,7 @@ LOG_PREFIX="[start-local]"
 PROJECT_NAME="archieos"
 
 # Optional ultra-verbose shell tracing
-START_LOCAL_TRACE="${START_LOCAL_TRACE:-1}"
+START_LOCAL_TRACE="${START_LOCAL_TRACE:-0}"
 if [[ "$START_LOCAL_TRACE" == "1" ]]; then
   PS4='+ $(date +%H:%M:%S) ${BASH_SOURCE##*/}:${LINENO}: '
   set -x
@@ -14,10 +14,10 @@ fi
 
 # Central log file for this run
 LOG_FILE="/tmp/start-local.$(date +%Y%m%d-%H%M%S).log"
+umask 077
 mkdir -p /tmp
 # Mirror all stdout/stderr into the log file
 exec > >(tee -a "$LOG_FILE") 2>&1
-
 log() {
   printf '\033[1;34m%s\033[0m %s\n' "$LOG_PREFIX" "$*"
 }

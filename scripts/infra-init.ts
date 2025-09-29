@@ -198,7 +198,13 @@ async function main() {
     try {
       qUrl = (await sqs.send(new CreateQueueCommand({ QueueName: INTAKE_QUEUE_NAME }))).QueueUrl!;
     } catch (e: any) {
-      if (e?.name === 'QueueAlreadyExists') {
+      if (
+        e?.name === 'QueueAlreadyExists' ||
+        e?.name === 'QueueNameExists' ||
+        e?.Code === 'QueueAlreadyExists' ||
+        e?.Code === 'QueueNameExists' ||
+        (typeof e?.message === 'string' && e.message.includes('Queue already exists'))
+      ) {
         qUrl = (await sqs.send(new GetQueueUrlCommand({ QueueName: INTAKE_QUEUE_NAME }))).QueueUrl!;
       } else {
         throw e;
@@ -216,7 +222,8 @@ async function main() {
     );
     console.log('SQS queues ensured:', { qUrl, dlqUrl });
   } catch (err) {
-    console.log('SQS ensure error (likely exists):', (err as any)?.name || err);
+    console.error('Failed to ensure SQS queues:', (err as any)?.name || err);
+    throw err;
   }
 
   // Alarms and Dashboard

@@ -112,7 +112,12 @@ export function extractFromSlackEvent(body: unknown):
   }
 
   if (type === 'shortcut' || type === 'message_action') {
-    const text = String(payload?.callback_id || payload?.text || '');
+    const text = String(
+      payload?.message?.text ||
+      payload?.text ||
+      payload?.callback_id ||
+      ''
+    );
     const slackUser = String(payload?.user?.id || payload?.user_id || '');
     const channel = String(payload?.channel?.id || payload?.channel?.name || payload?.channel_id || 'shortcut');
     const ts = String(payload?.action_ts || payload?.message?.ts || payload?.ts || Date.now());
