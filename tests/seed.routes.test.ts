@@ -3,14 +3,24 @@ import request from 'supertest';
 
 let app: any;
 
+const envBootstrap: Record<string, () => string> = {
+  NODE_ENV: () => 'test',
+  AWS_REGION: () => 'us-east-1',
+  LOCALSTACK_ENDPOINT: () => 'http://localhost:4566',
+  AWS_ACCESS_KEY_ID: () => process.env.AWS_ACCESS_KEY_ID ?? 'test',
+  AWS_SECRET_ACCESS_KEY: () => process.env.AWS_SECRET_ACCESS_KEY ?? 'test',
+  ENTITIES_TABLE: () => 'entities',
+  LISTINGS_TABLE: () => 'listings',
+  TASKS_TABLE: () => 'tasks',
+  AUDIT_LOG_TABLE: () => 'audit_log',
+};
+const previousEnv: Record<string, string | undefined> = {};
+
 beforeAll(async () => {
-  process.env.NODE_ENV = 'test';
-  process.env.AWS_REGION = 'us-east-1';
-  process.env.LOCALSTACK_ENDPOINT = 'http://localhost:4566';
-  process.env.ENTITIES_TABLE = 'entities';
-  process.env.LISTINGS_TABLE = 'listings';
-  process.env.TASKS_TABLE = 'tasks';
-  process.env.AUDIT_LOG_TABLE = 'audit_log';
+  for (const [key, valueFactory] of Object.entries(envBootstrap)) {
+    previousEnv[key] = process.env[key];
+    process.env[key] = valueFactory();
+  }
   await import('../scripts/infra-init');
   await import('../scripts/seed');
   app = (await import('../src/app')).default;
@@ -18,7 +28,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (app) await app.close();
+  try {
+    if (app) await app.close();
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 });
 
 describe('Seed data endpoints', () => {

@@ -1,29 +1,37 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import dotenv from "dotenv";
-import { putTask, deleteTaskById, type Task } from "../src/db/tasks";
+import type { Task } from "../src/db/tasks";
 
 dotenv.config();
 
 let app: any;
 let adminTask: Task;
 let marketingTask: Task;
+let putTaskFn: (t: any) => Promise<Task>;
+let deleteTaskFn: (id: string) => Promise<void>;
 
 beforeAll(async () => {
   process.env.NODE_ENV = "test";
   process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
   process.env.LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || "http://localhost:4566";
+  process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || "test";
+  process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || "test";
   app = (await import("../src/app")).default;
   await app.ready();
 
-  adminTask = await putTask({ name: "Admin stray", status: "OPEN", task_category: "ADMIN", is_stray: true, is_generic: true } as Partial<Task> as any);
-  marketingTask = await putTask({ name: "Marketing stray", status: "OPEN", task_category: "MARKETING", is_stray: true, is_generic: false } as Partial<Task> as any);
+  const mod = await import("../src/db/tasks");
+  putTaskFn = mod.putTask;
+  deleteTaskFn = mod.deleteTaskById;
+
+  adminTask = await putTaskFn({ name: "Admin stray", status: "OPEN", task_category: "ADMIN", is_stray: true, is_generic: true } as Partial<Task> as any);
+  marketingTask = await putTaskFn({ name: "Marketing stray", status: "OPEN", task_category: "MARKETING", is_stray: true, is_generic: false } as Partial<Task> as any);
 });
 
 afterAll(async () => {
   try {
-    if (adminTask?.task_id) await deleteTaskById(adminTask.task_id);
-    if (marketingTask?.task_id) await deleteTaskById(marketingTask.task_id);
+    if (adminTask?.task_id) await deleteTaskFn(adminTask.task_id);
+    if (marketingTask?.task_id) await deleteTaskFn(marketingTask.task_id);
   } finally {
     await app.close();
   }

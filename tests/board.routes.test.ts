@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, skip } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import dotenv from "dotenv";
-import { putListing, type Listing } from "../src/db/listings";
 import { generateUlid } from "../src/services/ids";
+import type { Listing } from "../src/db/listings";
 
 dotenv.config();
 
@@ -11,14 +11,16 @@ let seededNew: Listing;
 let seededInProgress: Listing;
 let seededCompleted: Listing;
 
-const isLocal = process.env.NODE_ENV === "local" && process.env.LOCALSTACK_ENDPOINT;
-
 beforeAll(async () => {
-  if (!isLocal) skip();
-
   process.env.NODE_ENV = "test";
+  process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
+  process.env.LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || "http://localhost:4566";
+  process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || "test";
+  process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || "test";
   app = (await import("../src/app")).default;
   await app.ready();
+
+  const { putListing } = await import("../src/db/listings");
 
   const now = new Date().toISOString();
   const past = new Date(Date.now() - 24 * 3600 * 1000).toISOString();

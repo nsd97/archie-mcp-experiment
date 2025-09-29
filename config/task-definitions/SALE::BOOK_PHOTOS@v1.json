@@ -1,0 +1,28 @@
+{
+  "task_def_id": "SALE::BOOK_PHOTOS",
+  "version": 1,
+  "title": "Book Photos",
+  "description": "Schedule photography for listing",
+  "inputs_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "availability": { "type": "string" }
+    },
+    "required": ["availability"]
+  },
+  "outputs_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "scheduled_start": { "type": "string" },
+      "scheduled_end": { "type": "string" }
+    },
+    "required": ["scheduled_start"]
+  },
+  "default_due_offset_hours": 72,
+  "visibility_group": "BOTH",
+  "required_docs": []
+}
+
+

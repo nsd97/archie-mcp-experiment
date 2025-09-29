@@ -1,188 +1,345 @@
-import type { FastifyInstance } from "fastify";
-import { queryListingTasks, getTaskById, claimTask, unclaimTask, type Task } from "../db/tasks";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
+import {
+  getTaskById,
+  queryListingTasks,
+  claimTask,
+  unclaimTask,
+  completeTask,
+  type Task,
+} from "../db/tasks";
+import { getListingById } from "../db/listings";
+import { getUserContext, canSeeTask, canClaimTask, canUnclaimTask, canCompleteTask } from "../services/authz";
 
-function toApiPriority(p?: number): "low" | "medium" | "high" | "urgent" {
-  if ((p ?? 0) >= 9) return "urgent";
-  if ((p ?? 0) >= 6) return "high";
-  if ((p ?? 0) >= 3) return "medium";
+const claimRequestSchema = z
+  .object({
+    userId: z.string().min(1).optional(),
+    assigneeId: z.string().min(1).optional(),
+    notes: z.any().optional(),
+  })
+  .refine((b) => !!(b.userId || b.assigneeId), {
+    message: "userId or assigneeId is required",
+  });
+
+const claimResponseSchema = z.object({
+  task: z.object({
+    id: z.string(),
+    listingId: z.string().optional(),
+    name: z.string(),
+    status: z.string(),
+    priority: z.string(),
+    assignedTo: z.object({ userId: z.string() }).nullable(),
+    claimedAt: z.string().nullable(),
+  }),
+});
+
+const unclaimRequestSchema = z.object({
+  userId: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+const unclaimResponseSchema = z.object({
+  task: z.object({
+    id: z.string(),
+    status: z.string(),
+    assignedTo: z.null(),
+  }),
+});
+
+const completeRequestSchema = z.object({
+  userId: z.string().optional(),
+  completedBy: z.string().optional(),
+  outputs: z.any().optional(),
+});
+
+const completeResponseSchema = z.object({
+  task: z.object({
+    id: z.string(),
+    status: z.string(),
+    completedAt: z.string().nullable(),
+    completedBy: z.string().nullable(),
+  }),
+});
+
+const listTasksQuerySchema = z.object({
+  status: z.string().optional(),
+  assignedTo: z.string().optional(),
+  priority: z.string().optional(),
+  page: z.coerce.number().min(1).optional(),
+  limit: z.coerce.number().min(1).max(100).optional(),
+});
+
+const listTasksParamsSchema = z.object({ listingId: z.string() });
+
+const listTasksResponseSchema = z.object({
+  listingId: z.string(),
+  tasks: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      status: z.string(),
+      priority: z.string(),
+    })
+  ),
+  pagination: z.object({
+    page: z.number(),
+    limit: z.number(),
+    total: z.number(),
+    totalPages: z.number(),
+  }),
+});
+
+const getTaskParamsSchema = z.object({ taskId: z.string() });
+const getTaskResponseSchema = z.object({ task: z.object({ id: z.string(), status: z.string() }) });
+
+function toPriorityLabel(priority?: number): string {
+  if ((priority ?? 0) >= 8) return "urgent";
+  if ((priority ?? 0) >= 4) return "high";
+  if ((priority ?? 0) >= 2) return "medium";
   return "low";
 }
 
-function toApiStatus(s: string): "pending" | "claimed" | "in_progress" | "completed" | "cancelled" {
-  const v = (s || "").toLowerCase();
-  if (v === "claimed") return "claimed";
-  if (v === "in_progress") return "in_progress";
-  if (v === "done" || v === "completed") return "completed";
-  if (v === "cancelled") return "cancelled";
-  return "pending";
-}
-
-function toApiTask(t: Task) {
-  return {
-    id: t.task_id,
-    listingId: t.listing_id || "",
-    name: t.name,
-    description: t.description || "",
-    status: toApiStatus(t.status),
-    priority: toApiPriority(t.priority),
-    category: t.task_category || "",
-    tags: [],
-    estimatedDurationMinutes: t.estimated_duration_minutes || 0,
-    requiredSkills: t.required_skills || [],
-    assignedTo: t.assigned_to || null,
-    createdAt: t.created_at,
-    updatedAt: t.updated_at,
-    claimedAt: t.claimed_at || null,
-    dueDate: t.due_date || null,
-    completedAt: t.completed_at || null,
-    metadata: {},
-  };
-}
-
 export default async function tasksRoutes(app: FastifyInstance) {
-  app.get("/v1/operations/my-tasks", async (req, reply) => {
-    const userId = req.headers["x-user-id"] as string;
-    if (!userId) {
-      return reply.code(401).send({ error: "Missing authenticated user" });
-    }
-    const mod = await import("../db/tasks");
-    const tasks: Task[] = await mod.queryMyTasks(userId, "", 1000);
-    const byListing = new Map<string, Task[]>();
-    for (const t of tasks) {
-      const lid = t.listing_id || "unknown";
-      if (!byListing.has(lid)) byListing.set(lid, []);
-      byListing.get(lid)!.push(t);
-    }
-    const listings: any[] = [];
-    for (const [listingId, ts] of byListing) {
-      const listing = await (await import("../db/listings")).getListingById(listingId);
-      if (!listing) continue;
-      const earliestDue = ts.reduce<string | null>((earliest, current) => {
-        if (!current.due_date) return earliest;
-        if (!earliest) return current.due_date;
-        return new Date(current.due_date).getTime() < new Date(earliest).getTime() ? current.due_date : earliest;
-      }, null);
-      listings.push({
-        listingId,
-        address: listing.address_string || "",
-        listingType: listing.type,
-        status: listing.status,
-        agent: listing.agent_id || "",
-        dueDate: earliestDue,
-        taskCount: ts.length,
-        tasks: ts.map((t) => {
-          const status = toApiStatus(t.status);
-          return {
-            taskId: t.task_id,
-            title: t.name,
-            sla: 0,
-            dueDate: t.due_date || null,
-            priority: ((t.priority ?? 0) >= 8 ? "HIGH" : (t.priority ?? 0) >= 4 ? "MEDIUM" : "LOW"),
-            status:
-              status === "completed"
-                ? "COMPLETED"
-                : status === "cancelled"
-                ? "CANCELLED"
-                : status === "claimed" || status === "in_progress"
-                ? "IN_PROGRESS"
-                : "ASSIGNED",
-          };
-        }),
+  app.withValidation({
+    method: "GET",
+    url: "/v1/operations/tasks/:listingId",
+    validation: {
+      params: listTasksParamsSchema,
+      query: listTasksQuerySchema,
+      response: { 200: listTasksResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { listingId } = req.params as any;
+      const { status, assignedTo, priority, page, limit } = req.query as any;
+      const user = getUserContext(req as any);
+
+      const listing = await getListingById(listingId);
+      if (!listing) return reply.code(404).send({ error: "Listing not found" });
+
+      const pageNum = Math.max(1, Number(page ?? 1) || 1);
+      const limitNum = Math.min(100, Math.max(1, Number(limit ?? 25) || 25));
+
+      let statusPrefix = "";
+      if (status) statusPrefix = status;
+      const allTasks = await queryListingTasks(listingId, statusPrefix, 1000);
+      const visibleTasks = allTasks.filter((task) => {
+        try {
+          if (!canSeeTask(user, task.visibility_group)) return false;
+          return true;
+        } catch {
+          return false;
+        }
       });
-    }
-    const totalTasks = tasks.length;
-    return reply.send({ listings, totalTasks });
+      let filteredTasks = visibleTasks;
+
+      if (assignedTo) filteredTasks = filteredTasks.filter((t) => t.assigned_to?.userId === assignedTo);
+      if (priority) filteredTasks = filteredTasks.filter((t) => toPriorityLabel(t.priority) === priority);
+
+      const total = filteredTasks.length;
+      const totalPages = Math.max(1, Math.ceil(total / limitNum));
+      const start = (pageNum - 1) * limitNum;
+      const pageItems = filteredTasks.slice(start, start + limitNum).map((t) => ({
+        id: t.task_id,
+        name: t.name,
+        status: t.status,
+        priority: toPriorityLabel(t.priority),
+      }));
+
+      return {
+        listingId,
+        tasks: pageItems,
+        pagination: { page: pageNum, limit: limitNum, total, totalPages },
+      };
+    },
   });
 
-  app.get("/v1/operations/stray-queues", async (_req, reply) => {
-    const mod = await import("../db/tasks");
-    const categories = ["ADMIN", "MARKETING"] as const;
-    const queues: any[] = [];
-    let totalTasks = 0;
+  // Notes: POST /v1/tasks/:taskId/notes and GET /v1/tasks/:taskId/notes
+  const noteBodySchema = z.object({ text: z.string().min(1) });
+  const noteResponseSchema = z.object({ note: z.object({ id: z.string(), text: z.string(), createdAt: z.string() }) });
+  const notesListResponseSchema = z.object({ notes: z.array(z.object({ id: z.string(), text: z.string(), createdAt: z.string() })) });
 
-    for (const cat of categories) {
-      const key = `${cat}#1`;
-      const items: Task[] = await mod.queryTasksByCategory(key, "", 1000);
-      const mapped = await Promise.all(
-        items.map(async (t) => {
-          let address: string | null = t.address || null;
-          if (!address && t.listing_id) {
-            const l = await (await import("../db/listings")).getListingById(t.listing_id);
-            address = l?.address_string || null;
-          }
-          return {
-            taskId: t.task_id,
-            title: t.name,
-            taskCategory: cat,
-            createdBy: t.created_by || "",
-            dueDate: t.due_date || null,
-            priority: ((t.priority ?? 0) >= 8 ? "HIGH" : (t.priority ?? 0) >= 4 ? "MEDIUM" : "LOW"),
-            listingId: t.listing_id || null,
-            address,
-            isGeneric: !!t.is_generic,
-          };
-        })
-      );
-      queues.push({ category: cat, displayName: `${cat.charAt(0)}${cat.slice(1).toLowerCase()} Queue`, tasks: mapped, taskCount: mapped.length });
-      totalTasks += mapped.length;
-    }
-
-    return reply.send({ queues, totalTasks });
+  app.withValidation({
+    method: "POST",
+    url: "/v1/tasks/:taskId/notes",
+    validation: { params: z.object({ taskId: z.string() }), body: noteBodySchema, response: { 200: noteResponseSchema } },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { taskId } = req.params as any;
+      const { text } = req.body as any;
+      const user = getUserContext(req as any);
+      const { putAuditEvent } = await import("../db/audit_log");
+      const { getTaskById } = await import("../db/tasks");
+      const task = await getTaskById(taskId);
+      if (!task) return reply.code(404).send({ error: "Not Found" });
+      if (!canSeeTask(user, task.visibility_group)) return reply.code(403).send({ error: "forbidden" });
+      const evt = await putAuditEvent({
+        entity_id: taskId,
+        entity_type: "task",
+        action: "NOTE_ADDED",
+        content: text,
+        note_type: "general",
+        performed_by: user?.userId || "system",
+      } as any);
+      if (task?.listing_id) {
+        await putAuditEvent({
+          entity_id: task.listing_id,
+          entity_type: "listing",
+          action: "NOTE_ADDED",
+          content: text,
+          note_type: "general",
+          performed_by: user?.userId || "system",
+        } as any);
+      }
+      return { note: { id: evt.event_id, text, createdAt: evt.timestamp } };
+    },
   });
 
-  app.get("/v1/operations/tasks/:listingId", async (req, reply) => {
-    const { listingId } = req.params as any;
-    const { status, assignedTo, priority, page, limit } = (req.query as any) || {};
-    const pageNum = Math.max(1, Number(page ?? 1) || 1);
-    const limitNum = Math.min(100, Math.max(1, Number(limit ?? 25) || 25));
-
-    // Fetch tasks by listing; optionally filter in-memory for simplicity
-    let tasks = await queryListingTasks(listingId, "", 1000);
-    if (status) tasks = tasks.filter(t => toApiStatus(t.status) === status);
-    if (assignedTo) tasks = tasks.filter(t => t.assigned_to?.userId === assignedTo);
-    if (priority) tasks = tasks.filter(t => toApiPriority(t.priority) === priority);
-
-    const total = tasks.length;
-    const totalPages = Math.max(1, Math.ceil(total / limitNum));
-    const start = (pageNum - 1) * limitNum;
-    const pageItems = tasks.slice(start, start + limitNum).map(toApiTask);
-
-    return reply.send({ listingId, tasks: pageItems, pagination: { page: pageNum, limit: limitNum, total, totalPages } });
+  app.withValidation({
+    method: "GET",
+    url: "/v1/tasks/:taskId/notes",
+    validation: { params: z.object({ taskId: z.string() }), response: { 200: notesListResponseSchema } },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { taskId } = req.params as any;
+      const user = getUserContext(req as any);
+      const task = await getTaskById(taskId);
+      if (!task) return reply.code(404).send({ error: "Not Found" });
+      if (!canSeeTask(user, task.visibility_group)) return reply.code(403).send({ error: "forbidden" });
+      const mod = await import("../db/audit_log");
+      const events = await mod.queryListingHistory(`task#${taskId}`, "", 100);
+      const notes = events
+        .filter((e: any) => (e.action || "").toUpperCase() === "NOTE_ADDED")
+        .map((e: any) => ({ id: e.event_id, text: e.content as string, createdAt: e.timestamp }));
+      return { notes };
+    },
   });
 
-  app.get("/v1/operations/tasks/task/:taskId", async (req, reply) => {
-    const { taskId } = req.params as any;
-    const task = await getTaskById(taskId);
-    if (!task) return reply.code(404).send({ error: "Not Found" });
-    return reply.send({ task: toApiTask(task) });
+
+  app.withValidation({
+    method: "GET",
+    url: "/v1/operations/tasks/task/:taskId",
+    validation: { params: getTaskParamsSchema, response: { 200: getTaskResponseSchema } },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { taskId } = req.params as any;
+      const task = await getTaskById(taskId);
+      if (!task) return reply.code(404).send({ error: "Not Found" });
+      const user = getUserContext(req as any);
+      if (!canSeeTask(user, task.visibility_group)) return reply.code(403).send({ error: "forbidden" });
+      return { task: { id: task.task_id, status: task.status } };
+    },
   });
 
-  app.post("/v1/operations/tasks/:taskId/claim", async (req, reply) => {
-    const { taskId } = req.params as any;
-    const body = (req.body as any) || {};
-    const userId = body.userId || body.assigneeId;
-    if (!userId) return reply.code(400).send({ error: "Missing userId" });
-    const task = await getTaskById(taskId);
-    if (!task) return reply.code(404).send({ error: "Not Found" });
-    const updated = await claimTask(task, userId);
-    return reply.send({ task: toApiTask(updated) });
+  app.withValidation({
+    method: "POST",
+    url: "/v1/operations/tasks/:taskId/claim",
+    validation: {
+      params: z.object({ taskId: z.string() }),
+      body: claimRequestSchema,
+      response: { 200: claimResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { taskId } = req.params as any;
+      const { userId: bodyUserId, assigneeId } = req.body as any;
+      const userContext = getUserContext(req as any);
+      const userId = bodyUserId || assigneeId;
+      const task = await getTaskById(taskId);
+      if (!task) return reply.code(404).send({ error: "Not Found" });
+      if (!canClaimTask(userContext, task)) return reply.code(403).send({ error: "forbidden" });
+      const updated = await claimTask(task as Task, userId);
+      const auditor = userContext?.userId || "system";
+      const { putAuditEvent } = await import("../db/audit_log");
+      await putAuditEvent({
+        entity_id: taskId,
+      entity_type: "task",
+        action: "TASK_CLAIMED",
+        performed_by: auditor,
+        content: JSON.stringify({ previousAssignee: task.assigned_to?.userId, newAssignee: userId }),
+      } as any);
+      return {
+        task: {
+          id: updated.task_id,
+          listingId: updated.listing_id,
+          name: updated.name,
+          status: updated.status, // remains 'CLAIMED'
+          priority: toPriorityLabel(updated.priority),
+          assignedTo: updated.assigned_to ? { userId: updated.assigned_to.userId } : null,
+          claimedAt: updated.claimed_at ?? null,
+        },
+      };
+    },
   });
 
-  app.post("/v1/operations/tasks/:taskId/unclaim", async (req, reply) => {
-    const { taskId } = req.params as any;
-    const task = await getTaskById(taskId);
-    if (!task) return reply.code(404).send({ error: "Not Found" });
-    const updated = await unclaimTask(task);
-    return reply.send({ success: true, task: { taskId: updated.task_id, title: updated.name, status: "UNASSIGNED", unclaimedAt: updated.updated_at }, message: "Task unclaimed" });
+  app.withValidation({
+    method: "POST",
+    url: "/v1/operations/tasks/:taskId/unclaim",
+    validation: {
+      params: z.object({ taskId: z.string() }),
+      body: unclaimRequestSchema,
+      response: { 200: unclaimResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { taskId } = req.params as any;
+      const userContext = getUserContext(req as any);
+      const task = await getTaskById(taskId);
+      if (!task) return reply.code(404).send({ error: "Not Found" });
+      if (!canUnclaimTask(userContext, task)) return reply.code(403).send({ error: "forbidden" });
+      const updated = await unclaimTask(task as Task);
+      const { putAuditEvent } = await import("../db/audit_log");
+      await putAuditEvent({
+        entity_id: taskId,
+        entity_type: "task",
+        action: "TASK_UNCLAIMED",
+        performed_by: userContext?.userId || "system",
+        content: JSON.stringify({ previousAssignee: task.assigned_to?.userId }),
+      } as any);
+      return {
+        task: {
+          id: updated.task_id,
+          status: "UNASSIGNED",
+          assignedTo: null,
+        },
+      };
+    },
   });
 
-  app.post("/v1/operations/tasks/:taskId/complete", async (req, reply) => {
-    const { taskId } = req.params as any;
-    const task = await getTaskById(taskId);
-    if (!task) return reply.code(404).send({ error: "Not Found" });
-    const body = (req.body as any) || {};
-    const completedBy = body.userId || body.completedBy || "system";
-    const updated = await (await import("../db/tasks")).completeTask(task, completedBy);
-    return reply.send({ success: true, task: { taskId: updated.task_id, title: updated.name, status: "COMPLETED", completedAt: (updated as any).completed_at, completedBy }, message: "Task completed" });
+  app.withValidation({
+    method: "POST",
+    url: "/v1/operations/tasks/:taskId/complete",
+    validation: {
+      params: z.object({ taskId: z.string() }),
+      body: completeRequestSchema,
+      response: { 200: completeResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
+      const { taskId } = req.params as any;
+      const { completedBy, outputs } = req.body as any;
+      const userContext = getUserContext(req as any);
+      const task = await getTaskById(taskId);
+      if (!task) return reply.code(404).send({ error: "Not Found" });
+      if (!canCompleteTask(userContext, task)) return reply.code(403).send({ error: "forbidden" });
+      // Enforce outputs schema if task_def_id present
+      if (task.task_def_id) {
+        const { validateTaskOutputs } = await import('../services/taskCatalog');
+        const res = validateTaskOutputs(task.task_def_id, outputs || {});
+        if (!res.valid) {
+          return reply.code(400).send({ error: 'Invalid outputs', details: res.errors });
+        }
+      }
+      const updated = await completeTask(task as Task, completedBy || "system");
+      const { putAuditEvent } = await import("../db/audit_log");
+      await putAuditEvent({
+        entity_id: taskId,
+        entity_type: "task",
+        action: "TASK_COMPLETED",
+        performed_by: userContext?.userId || completedBy || "system",
+        content: JSON.stringify({ outputs: outputs ?? {} }),
+      } as any);
+      return {
+        task: {
+          id: updated.task_id,
+          status: "COMPLETED",
+          completedAt: updated.completed_at ?? null,
+          completedBy: updated.completed_by ?? null,
+        },
+      };
+    },
   });
 }

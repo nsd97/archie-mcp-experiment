@@ -136,7 +136,7 @@ const tasks = [
 async function put(table: string, item: Record<string, unknown>) {
   try {
     await ddb.send(new PutCommand({ TableName: table, Item: item }));
-    console.log(`Upserted into ${table}: ${item as any}.`);
+    console.log(`Upserted into ${table}: ${JSON.stringify(item, null, 2)}`);
   } catch (err) {
     console.error(`Failed to upsert into ${table}`, err);
     process.exit(1);

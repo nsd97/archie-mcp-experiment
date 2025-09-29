@@ -4,7 +4,7 @@ services:
     image: localstack/localstack:3
     container_name: archieos-localstack
     environment:
-      - SERVICES=s3,dynamodb
+      - SERVICES=s3,dynamodb,sqs,cloudwatch
       - DEBUG=0
       - LS_LOG=info
       - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}

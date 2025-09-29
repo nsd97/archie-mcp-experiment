@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import dotenv from "dotenv";
-import { putListing, type Listing } from "../src/db/listings";
-import { putTask, type Task } from "../src/db/tasks";
-import { putAuditEvent } from "../src/db/audit_log";
+import type { Listing } from "../src/db/listings";
+import type { Task } from "../src/db/tasks";
 
 dotenv.config();
 
@@ -14,8 +13,14 @@ beforeAll(async () => {
   process.env.NODE_ENV = "test";
   process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
   process.env.LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || "http://localhost:4566";
+  process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || "test";
+  process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || "test";
   app = (await import("../src/app")).default;
   await app.ready();
+
+  const { putListing } = await import("../src/db/listings");
+  const { putTask } = await import("../src/db/tasks");
+  const { putAuditEvent } = await import("../src/db/audit_log");
 
   listing = await putListing({
     type: "SALE",

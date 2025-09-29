@@ -1,5 +1,7 @@
 import { DynamoDBClient, CreateTableCommand, ListTablesCommand, type CreateTableCommandInput } from '@aws-sdk/client-dynamodb';
 import { S3Client, CreateBucketCommand, ListBucketsCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+import { SQSClient, CreateQueueCommand, GetQueueAttributesCommand, GetQueueUrlCommand, SetQueueAttributesCommand } from '@aws-sdk/client-sqs';
+import { CloudWatchClient, PutMetricAlarmCommand, PutDashboardCommand } from '@aws-sdk/client-cloudwatch';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,9 +15,23 @@ const LISTINGS_TABLE = process.env.LISTINGS_TABLE || 'listings';
 const TASKS_TABLE = process.env.TASKS_TABLE || 'tasks';
 const AUDIT_LOG_TABLE = process.env.AUDIT_LOG_TABLE || 'audit_log';
 const ARTIFACTS_BUCKET = process.env.ARTIFACTS_BUCKET || 'archieos-artifacts';
+const INTAKE_QUEUE_NAME = process.env.INTAKE_QUEUE_NAME || 'intake-queue';
+const INTAKE_DLQ_NAME = process.env.INTAKE_DLQ_NAME || 'intake-queue-dlq';
+const INTAKE_EVENTS_TABLE = process.env.INTAKE_EVENTS_TABLE || 'intake_events';
 
-const ddb = new DynamoDBClient({ region, endpoint: isLocal ? endpoint : undefined });
-const s3 = new S3Client({ region, endpoint: isLocal ? endpoint : undefined, forcePathStyle: true });
+const localCreds = isLocal
+  ? {
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test',
+      },
+    }
+  : {};
+
+const ddb = new DynamoDBClient({ region, endpoint: isLocal ? endpoint : undefined, ...(localCreds as any) });
+const s3 = new S3Client({ region, endpoint: isLocal ? endpoint : undefined, forcePathStyle: true, ...(localCreds as any) });
+const sqs = new SQSClient({ region, endpoint: isLocal ? endpoint : undefined, ...(localCreds as any) });
+const cw = new CloudWatchClient({ region, endpoint: isLocal ? endpoint : undefined, ...(localCreds as any) });
 
 async function ensureTable(def: CreateTableCommandInput) {
   try {
@@ -134,6 +150,12 @@ async function main() {
         { IndexName: 'ListingHistoryIndex', KeySchema: [ { AttributeName: 'entity_type#entity_id', KeyType: 'HASH' }, { AttributeName: 'timestamp', KeyType: 'RANGE' } ], Projection: { ProjectionType: 'ALL' }, ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 } },
       ],
     },
+    {
+      TableName: INTAKE_EVENTS_TABLE,
+      KeySchema: [{ AttributeName: 'event_id', KeyType: 'HASH' }],
+      AttributeDefinitions: [{ AttributeName: 'event_id', AttributeType: 'S' }],
+      ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+    },
   ];
 
   for (const t of tables) {
@@ -141,6 +163,121 @@ async function main() {
   }
 
   await ensureBucket(ARTIFACTS_BUCKET);
+
+  // SQS queues (DLQ + main with redrive)
+  try {
+    // DLQ
+    let dlqUrl: string;
+    try {
+      dlqUrl = (await sqs.send(new CreateQueueCommand({ QueueName: INTAKE_DLQ_NAME }))).QueueUrl!;
+    } catch (e: any) {
+      // AWS SQS throws an error with code 'QueueAlreadyExists' or 'QueueNameExists' if the queue already exists.
+      // In localstack, the error may not always have a consistent code, so also check the message.
+      if (
+        e?.name === 'QueueAlreadyExists' ||
+        e?.name === 'QueueNameExists' ||
+        e?.Code === 'QueueAlreadyExists' ||
+        e?.Code === 'QueueNameExists' ||
+        (typeof e?.message === 'string' && e.message.includes('Queue already exists'))
+      ) {
+        dlqUrl = (await sqs.send(new GetQueueUrlCommand({ QueueName: INTAKE_DLQ_NAME }))).QueueUrl!;
+      } else {
+        throw e;
+      }
+    }
+    const dlqAttrs = await sqs.send(
+      new GetQueueAttributesCommand({
+        QueueUrl: dlqUrl,
+        AttributeNames: ['QueueArn'],
+      })
+    );
+    const dlqArn = dlqAttrs.Attributes?.QueueArn as string;
+
+    // Main
+    let qUrl: string;
+    try {
+      qUrl = (await sqs.send(new CreateQueueCommand({ QueueName: INTAKE_QUEUE_NAME }))).QueueUrl!;
+    } catch (e: any) {
+      if (e?.name === 'QueueAlreadyExists') {
+        qUrl = (await sqs.send(new GetQueueUrlCommand({ QueueName: INTAKE_QUEUE_NAME }))).QueueUrl!;
+      } else {
+        throw e;
+      }
+    }
+    const redrivePolicy = JSON.stringify({
+      deadLetterTargetArn: dlqArn,
+      maxReceiveCount: 5,
+    });
+    await sqs.send(
+      new SetQueueAttributesCommand({
+        QueueUrl: qUrl,
+        Attributes: { RedrivePolicy: redrivePolicy },
+      })
+    );
+    console.log('SQS queues ensured:', { qUrl, dlqUrl });
+  } catch (err) {
+    console.log('SQS ensure error (likely exists):', (err as any)?.name || err);
+  }
+
+  // Alarms and Dashboard
+  try {
+    await cw.send(
+      new PutMetricAlarmCommand({
+        AlarmName: 'IntakeQueue-OldestAge-High',
+        MetricName: 'ApproximateAgeOfOldestMessage',
+        Namespace: 'AWS/SQS',
+        Statistic: 'Maximum',
+        Period: 60,
+        EvaluationPeriods: 1,
+        Threshold: 60,
+        ComparisonOperator: 'GreaterThanThreshold',
+        Dimensions: [{ Name: 'QueueName', Value: INTAKE_QUEUE_NAME }],
+      })
+    );
+    await cw.send(
+      new PutMetricAlarmCommand({
+        AlarmName: 'IntakeDLQ-MessagesVisible-High',
+        MetricName: 'ApproximateNumberOfMessagesVisible',
+        Namespace: 'AWS/SQS',
+        Statistic: 'Maximum',
+        Period: 60,
+        EvaluationPeriods: 1,
+        Threshold: 1,
+        ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+        Dimensions: [{ Name: 'QueueName', Value: INTAKE_DLQ_NAME }],
+        TreatMissingData: 'notBreaching',
+      })
+    );
+    // Basic dashboard with SQS widgets
+    const dashboardBody = JSON.stringify({
+      widgets: [
+        {
+          type: 'metric',
+          properties: {
+            title: 'SQS Visible Messages',
+            metrics: [['AWS/SQS', 'ApproximateNumberOfMessagesVisible', 'QueueName', INTAKE_QUEUE_NAME]],
+            view: 'timeSeries',
+            region,
+            period: 60,
+          },
+        },
+        {
+          type: 'metric',
+          properties: {
+            title: 'SQS Oldest Age',
+            metrics: [['AWS/SQS', 'ApproximateAgeOfOldestMessage', 'QueueName', INTAKE_QUEUE_NAME]],
+            view: 'timeSeries',
+            region,
+            period: 60,
+          },
+        },
+      ],
+    });
+    await cw.send(new PutDashboardCommand({ DashboardName: 'OpsCenter', DashboardBody: dashboardBody }));
+    console.log('CloudWatch alarms ensured');
+  } catch (e) {
+    console.log('CloudWatch alarms setup skipped:', (e as any)?.name || e);
+  }
 
   // Output for verification convenience
   const tableList = await ddb.send(new ListTablesCommand({}));

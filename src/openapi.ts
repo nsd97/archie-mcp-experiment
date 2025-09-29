@@ -97,13 +97,27 @@ export function buildOpenApiSpec() {
       // Future endpoints (placeholders for spec completeness)
       '/v1/tasks/{task_id}/attachments/sign-put': {
         post: {
-          summary: 'Sign S3 PUT for task attachment', operationId: 'signPutAttachment',
+          summary: 'Placeholder - Sign S3 PUT for task attachment (not implemented)',
+          operationId: 'signPutAttachment',
           parameters: [{ name: 'task_id', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: { '200': { description: 'OK' } },
+          responses: { '501': { description: 'Not Implemented' } },
         },
       },
       '/files/sign-get': {
-        get: { summary: 'Sign S3 GET', operationId: 'signGetFile', responses: { '200': { description: 'OK' } } },
+        post: {
+          summary: 'Placeholder - Sign S3 GET (not implemented)',
+          operationId: 'signGetFile',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { objectKey: { type: 'string' } }, required: ['objectKey'] } } } },
+          responses: { '501': { description: 'Not Implemented' } },
+        },
+      },
+      '/v1/listings/{id}/documents': {
+        get: {
+          summary: 'Placeholder - List listing documents (not implemented)',
+          operationId: 'listListingDocuments',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '501': { description: 'Not Implemented' } },
+        },
       },
       '/entities/me': {
         get: { summary: 'Get current entity', operationId: 'getMe', responses: { '200': { description: 'OK' } } },
@@ -113,6 +127,56 @@ export function buildOpenApiSpec() {
           summary: 'Get entity by id', operationId: 'getEntity',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           responses: { '200': { description: 'OK' }, '404': { description: 'Not Found' } },
+        },
+      },
+      '/entities': {
+        get: {
+          summary: 'Search entities by type and name',
+          operationId: 'searchEntities',
+          parameters: [
+            { name: 'type', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'query', in: 'query', required: false, schema: { type: 'string' } },
+          ],
+          responses: { '200': { description: 'OK' } },
+        },
+      },
+      '/slack/events': {
+        post: {
+          summary: 'Slack Events webhook',
+          operationId: 'slackEvents',
+          responses: { '200': { description: 'OK' }, '401': { description: 'Invalid signature' } },
+        },
+      },
+      '/slack/interact': {
+        post: {
+          summary: 'Slack Interactivity webhook',
+          operationId: 'slackInteract',
+          parameters: [
+            { name: 'X-Slack-Signature', in: 'header', required: true, schema: { type: 'string' } },
+            { name: 'X-Slack-Request-Timestamp', in: 'header', required: true, schema: { type: 'string' } },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/x-www-form-urlencoded': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    payload: {
+                      type: 'string',
+                      description: 'JSON-encoded interactive payload'
+                    }
+                  },
+                  required: ['payload']
+                }
+              }
+            }
+          },
+          security: [{ slackSignature: [] }],
+          responses: {
+            '200': { description: 'OK' },
+            '401': { description: 'Invalid signature' }
+          },
         },
       },
     },

@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:3
+    container_name: archieos-localstack-dev
+    environment:
+      - SERVICES=s3,dynamodb,sqs,cloudwatch
+      - DEBUG=0
+      - LS_LOG=info
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - HOSTNAME=localhost
+      - LOCALSTACK_HOST=localhost
+    ports:
+      - "4566:4566"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    image: node:20-alpine
+    container_name: archieos-backend-dev
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=local
+      - LOG_LEVEL=debug
+      - HTTP_LOG_VERBOSE=true
+      - ENABLE_CORS=true
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - ENTITIES_TABLE=${ENTITIES_TABLE:-entities}
+      - LISTINGS_TABLE=${LISTINGS_TABLE:-listings}
+      - TASKS_TABLE=${TASKS_TABLE:-tasks}
+      - AUDIT_LOG_TABLE=${AUDIT_LOG_TABLE:-audit_log}
+      - INTAKE_EVENTS_TABLE=${INTAKE_EVENTS_TABLE:-intake_events}
+      - ARTIFACTS_BUCKET=${ARTIFACTS_BUCKET:-archieos-artifacts}
+      - INTAKE_QUEUE_URL=${INTAKE_QUEUE_URL:-http://sqs.us-east-1.localhost:4566/000000000000/intake-queue}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080,http://localhost}
+    depends_on:
+      localstack:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Installing dependencies...' &&
+        npm install --legacy-peer-deps &&
+        echo 'Waiting for LocalStack...' &&
+        sleep 10 &&
+        echo 'Initializing infrastructure...' &&
+        npm run infra:init &&
+        echo 'Seeding data...' &&
+        npx ts-node scripts/seed.ts &&
+        echo 'Starting development server...' &&
+        npm run dev
+      "
+
+  frontend:
+    image: node:20-alpine
+    container_name: archieos-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./packages/frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_OPERATIONS_API_URL=http://localhost:3000/v1
+      - VITE_OPERATIONS_USER_ID=agent:noah
+      - VITE_OPERATIONS_DEBUG_USER={"userId":"agent:noah","email":"noah@example.com","name":"Noah Agent"}
+      - VITE_OPERATIONS_LISTING_LIMIT=100
+    depends_on:
+      - backend
+    command: >
+      sh -c "
+        echo 'Installing frontend dependencies...' &&
+        npm install &&
+        echo 'Starting frontend dev server...' &&
+        npm run dev -- --host 0.0.0.0
+      "

@@ -1,32 +1,36 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import dotenv from "dotenv";
-import { putListing, type Listing } from "../src/db/listings";
-import { putTask, type Task } from "../src/db/tasks";
 
 dotenv.config();
 
 let app: any;
-let listingA: Listing;
-let listingB: Listing;
-let userId = "user-mine";
+let listingA: any;
+let listingB: any;
+const userId = "user-mine";
 
 beforeAll(async () => {
   process.env.NODE_ENV = "test";
   process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
   process.env.LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || "http://localhost:4566";
+  process.env.AWS_ACCESS_KEY_ID = "test";
+  process.env.AWS_SECRET_ACCESS_KEY = "test";
+
   app = (await import("../src/app")).default;
   await app.ready();
 
-  listingA = await putListing({ type: "SALE", status: "ACTIVE", address_string: "60 Foxtrot Ave" } as Partial<Listing> as any);
-  listingB = await putListing({ type: "LEASE", status: "ACTIVE", address_string: "70 Golf Rd" } as Partial<Listing> as any);
+  const { putListing } = await import("../src/db/listings");
+  const { putTask } = await import("../src/db/tasks");
 
-  await putTask({ listing_id: listingA.listing_id, name: "A1", status: "OPEN", priority: 5, due_date: "2099-01-01T00:00:00.000Z", assigned_to: { userId } } as Partial<Task> as any);
-  await putTask({ listing_id: listingA.listing_id, name: "A2", status: "CLAIMED", priority: 2, due_date: "2099-02-01T00:00:00.000Z", assigned_to: { userId } } as Partial<Task> as any);
-  await putTask({ listing_id: listingB.listing_id, name: "B1", status: "OPEN", priority: 8, due_date: "2099-03-01T00:00:00.000Z", assigned_to: { userId } } as Partial<Task> as any);
+  listingA = await putListing({ type: "SALE", status: "ACTIVE", address_string: "60 Foxtrot Ave" } as any);
+  listingB = await putListing({ type: "LEASE", status: "ACTIVE", address_string: "70 Golf Rd" } as any);
+
+  await putTask({ listing_id: listingA.listing_id, name: "A1", status: "OPEN", priority: 5, due_date: "2099-01-01T00:00:00.000Z", assigned_to: { userId } } as any);
+  await putTask({ listing_id: listingA.listing_id, name: "A2", status: "CLAIMED", priority: 2, due_date: "2099-02-01T00:00:00.000Z", assigned_to: { userId } } as any);
+  await putTask({ listing_id: listingB.listing_id, name: "B1", status: "OPEN", priority: 8, due_date: "2099-03-01T00:00:00.000Z", assigned_to: { userId } } as any);
 });
 
-afterAll(async () => { await app.close(); });
+afterAll(async () => { if (app?.close) await app.close(); });
 
 describe("My Tasks APIs", () => {
   it("GET /v1/operations/my-tasks groups by listing and totals", async () => {
@@ -46,7 +50,6 @@ describe("My Tasks APIs", () => {
   });
 
   it("unclaim and complete mutate state correctly", async () => {
-    // Find one of user tasks and unclaim
     const res = await request(app.server).get("/v1/operations/my-tasks").query({ userId });
     const listingWithTwoTasks = res.body.listings.find(
       (l: any) => l.listingId === listingA.listing_id
@@ -60,7 +63,6 @@ describe("My Tasks APIs", () => {
     expect(unclaimRes.status).toBe(200);
     expect(unclaimRes.body.task.status).toBe("UNASSIGNED");
 
-    // Complete another task
     const secondTaskId = secondTask.taskId;
     const completeRes = await request(app.server)
       .post(`/v1/operations/tasks/${secondTaskId}/complete`)

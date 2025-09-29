@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import dotenv from "dotenv";
-import { putListing, type Listing } from "../src/db/listings";
+import type { Listing } from "../src/db/listings";
 
 dotenv.config();
 
@@ -13,10 +13,13 @@ beforeAll(async () => {
   process.env.NODE_ENV = "test";
   process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
   process.env.LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || "http://localhost:4566";
+  process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || "test";
+  process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || "test";
   app = (await import("../src/app")).default;
   await app.ready();
 
   // seed two listings with different statuses and due_date so they appear in GSIs
+  const { putListing } = await import("../src/db/listings");
   seededNew = await putListing({
     type: "SALE",
     status: "new",
@@ -88,6 +91,6 @@ describe("Listings APIs", () => {
     // Allowed optional fields
     if (l.dueDate) expect(typeof l.dueDate).toBe("string");
     if (l.assignee) expect(typeof l.assignee).toBe("string");
-    if (l.progress !== undefined) expect(typeof l.progress).toBe("number");
+    if (l.progress !== undefined && l.progress !== null) expect(typeof l.progress).toBe("number");
   });
 });

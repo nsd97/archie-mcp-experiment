@@ -25,4 +25,9 @@ jobs:
         run: npm run build
       - name: Generate OpenAPI
         run: node -e "console.log(JSON.stringify(require('./dist/openapi.js').buildOpenApiSpec()))" > openapi.json
+      - name: Upload OpenAPI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi.json
+          path: openapi.json
       # Optional spectral validation step can be added later

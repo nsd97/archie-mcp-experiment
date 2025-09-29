@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import dotenv from "dotenv";
-import { putListing, type Listing } from "../src/db/listings";
-import { putTask, type Task } from "../src/db/tasks";
+import type { Listing } from "../src/db/listings";
+import type { Task } from "../src/db/tasks";
 
 dotenv.config();
 
@@ -15,8 +15,13 @@ beforeAll(async () => {
   process.env.NODE_ENV = "test";
   process.env.AWS_REGION = process.env.AWS_REGION || "us-east-1";
   process.env.LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || "http://localhost:4566";
+  process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || "test";
+  process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || "test";
   app = (await import("../src/app")).default;
   await app.ready();
+
+  const { putListing } = await import("../src/db/listings");
+  const { putTask } = await import("../src/db/tasks");
 
   listing = await putListing({
     type: "SALE",
@@ -31,6 +36,7 @@ beforeAll(async () => {
     name: "Photograph property",
     status: "OPEN",
     priority: 7,
+    visibility_group: "ADMIN_OPS",
   } as Partial<Task> as any);
 
   taskB = await putTask({
@@ -38,6 +44,7 @@ beforeAll(async () => {
     name: "Prepare documents",
     status: "OPEN",
     priority: 3,
+    visibility_group: "ADMIN_MARKETING",
   } as Partial<Task> as any);
 });
 
@@ -48,13 +55,19 @@ afterAll(async () => {
 describe("Queue APIs", () => {
   it("claim one task, verify summary and queue view", async () => {
     const claimRes = await request(app.server)
-      .post(`/v1/operations/tasks/${taskA.task_id}/claim`)
-      .send({ assigneeId: "user-z" });
+      .post(`/v1/operations/tasks/${taskB.task_id}/claim`)
+      .set(
+        "X-Debug-User",
+        JSON.stringify({ userId: "admin:marketing", roles: ["ADMIN_MARKETING"], groups: ["ADMIN_MARKETING", "BOTH"] })
+      )
+      .send({ assigneeId: "admin:marketing" });
     expect(claimRes.status).toBe(200);
-    expect(claimRes.body.task.status).toBe("claimed");
+    expect(claimRes.body.task.status).toBe("CLAIMED");
     expect(typeof claimRes.body.task.claimedAt).toBe("string");
 
-    const summary = await request(app.server).get("/v1/operations/queues");
+    const summary = await request(app.server)
+      .get("/v1/operations/queues")
+      .set("X-Debug-User", JSON.stringify({ userId: "admin:ops", groups: ["ADMIN_OPS", "BOTH"], roles: ["ADMIN_OPS"] }));
     expect(summary.status).toBe(200);
     expect(summary.body).toEqual(
       expect.objectContaining({
@@ -66,18 +79,28 @@ describe("Queue APIs", () => {
       })
     );
 
-    const queue = await request(app.server).get("/v1/operations/queue");
+    const queue = await request(app.server)
+      .get("/v1/operations/queue")
+      .set("X-Debug-User", JSON.stringify({ userId: "admin:ops", groups: ["ADMIN_OPS", "BOTH"], roles: ["ADMIN_OPS"] }));
     expect(queue.status).toBe(200);
     expect(Array.isArray(queue.body.listings)).toBe(true);
     expect(typeof queue.body.totalListings).toBe("number");
     expect(typeof queue.body.totalTasks).toBe("number");
 
-    // Find our listing and validate tasks with canClaim
     const l = queue.body.listings.find((x: any) => x.listingId === listing.listing_id);
     expect(l).toBeTruthy();
-    const tA = l.tasks.find((t: any) => t.taskId === taskA.task_id);
-    const tB = l.tasks.find((t: any) => t.taskId === taskB.task_id);
-    expect(tA.canClaim).toBe(false);
-    expect(tB.canClaim).toBe(true);
+    const taskIds = l.tasks.map((t: any) => t.taskId);
+    expect(taskIds).toContain(taskA.task_id);
+    expect(taskIds).not.toContain(taskB.task_id);
+
+    // Marketing user should not see ADMIN_OPS only task but see marketing one
+    const marketingQueue = await request(app.server)
+      .get("/v1/operations/queue")
+      .set("X-Debug-User", JSON.stringify({ userId: "admin:marketing", roles: ["ADMIN_MARKETING"], groups: ["ADMIN_MARKETING", "BOTH"] }));
+    const marketingListing = marketingQueue.body.listings.find((x: any) => x.listingId === listing.listing_id);
+    expect(marketingListing).toBeTruthy();
+    const marketingIds = marketingListing.tasks.map((t: any) => t.taskId);
+    expect(marketingIds).toContain(taskB.task_id);
+    expect(marketingIds).not.toContain(taskA.task_id);
   });
 });

@@ -17,6 +17,7 @@ describe('OpenAPI route', () => {
   it('includes required paths', async () => {
     const res = await request(app.server).get('/openapi.json');
     expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
     const paths = Object.keys(res.body.paths || {});
     const required = [
       '/v1/operations/listings',
@@ -40,5 +41,11 @@ describe('OpenAPI route', () => {
     for (const p of required) {
       expect(paths).toContain(p);
     }
+  });
+  it('renders swagger ui at /docs', async () => {
+    const res = await request(app.server).get('/docs');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toMatch(/Operations Center/i);
   });
 });

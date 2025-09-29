@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: archieos-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=local
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - ENTITIES_TABLE=${ENTITIES_TABLE:-entities}
+      - LISTINGS_TABLE=${LISTINGS_TABLE:-listings}
+      - TASKS_TABLE=${TASKS_TABLE:-tasks}
+      - AUDIT_LOG_TABLE=${AUDIT_LOG_TABLE:-audit_log}
+      - ARTIFACTS_BUCKET=${ARTIFACTS_BUCKET:-archieos-artifacts}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+    depends_on:
+      - localstack
+
+  localstack:
+    image: localstack/localstack:3
+    container_name: archieos-localstack
+    environment:
+      - SERVICES=s3,dynamodb,sqs,cloudwatch
+      - DEBUG=1
+      - LS_LOG=info
+      - HOSTNAME=localhost
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+    ports:
+      - "4566:4566"
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./.localstack}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+

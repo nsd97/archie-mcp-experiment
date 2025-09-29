@@ -8,6 +8,7 @@ export type AssignedTo = { userId: string; username?: string; email?: string };
 export type Task = {
   task_id: string; // ULID
   listing_id?: string;
+  task_def_id?: string;
   address?: string;
   agent?: string;
   listing_type?: string;
@@ -45,6 +46,19 @@ const TASKS_TABLE = process.env.TASKS_TABLE || "tasks";
 export async function putTask(
   item: Omit<Task, "task_id" | "created_at" | "updated_at"> & Partial<Pick<Task, "task_id">>
 ): Promise<Task> {
+  // Validate inputs against catalog if task_def_id present
+  try {
+    if ((item as any).task_def_id) {
+      const { validateTaskInputs } = await import('../services/taskCatalog');
+      const res = validateTaskInputs((item as any).task_def_id as string, (item as any).inputs ?? {});
+      if (!res.valid) {
+        throw new Error(`Invalid task inputs for ${(item as any).task_def_id}: ${JSON.stringify(res.errors)}`);
+      }
+    }
+  } catch (e) {
+    // Re-throw to bubble up to route layer
+    throw e;
+  }
   const now = nowIso();
   const final: Task = {
     task_id: item.task_id ?? generateUlid(),

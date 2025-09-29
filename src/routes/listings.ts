@@ -1,4 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import { getListingById, queryListingsByStatus, queryListingsByCreatedAt, type Listing } from "../db/listings";
 
 type Status = "new" | "in_progress" | "completed";
@@ -8,196 +9,264 @@ type SortBy = "created_at" | "due_date" | "address";
 type ApiListing = {
   id: string;
   address: string;
-  assignee?: string;
-  dueDate?: string;
+  assignee?: string | null;
+  dueDate?: string | null;
   status: Status;
-  progress?: number;
+  progress?: number | null;
   createdAt: string;
   updatedAt: string;
 };
+
+const listingsQuerySchema = z.object({
+  status: z.enum(["new", "in_progress", "completed"]).optional(),
+  page: z.coerce.number().min(1).optional(),
+  limit: z.coerce.number().min(1).max(100).optional(),
+  sortBy: z.enum(["created_at", "due_date", "address"]).optional(),
+});
+
+const paginationSchema = z.object({
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  totalPages: z.number(),
+});
+
+const listingsResponseSchema = z.object({
+  listings: z.array(
+    z.object({
+      id: z.string(),
+      address: z.string(),
+      assignee: z.string().nullable(),
+      dueDate: z.string().nullable(),
+      status: z.string(),
+      progress: z.number().nullable(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+  ),
+  pagination: paginationSchema,
+});
+
+const listingParamsSchema = z.object({ id: z.string() });
+
+const listingResponseSchema = z.object({
+  id: z.string(),
+  address: z.string(),
+  assignee: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  status: z.string(),
+  progress: z.number().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const listingDetailsResponseSchema = z.object({
+  listing: z.object({
+    id: z.string(),
+    address: z.string(),
+    assignee: z.string().nullable(),
+    dueDate: z.string().nullable(),
+    status: z.string(),
+    progress: z.number().nullable(),
+  }),
+  details: z.object({
+    propertyType: z.string().nullable(),
+    bedrooms: z.number(),
+    bathrooms: z.number(),
+    sqft: z.number(),
+    yearBuilt: z.number(),
+    listPrice: z.number(),
+    notes: z.string().nullable(),
+  }),
+  history: z.array(
+    z.object({
+      id: z.string(),
+      action: z.string(),
+      performedBy: z.string().nullable(),
+      timestamp: z.string(),
+      changes: z.record(z.string(), z.any()).optional(),
+    })
+  ),
+  tasks: z.array(
+    z.object({ id: z.string(), title: z.string(), status: z.string(), assignee: z.string().nullable() })
+  ),
+  notes: z.array(
+    z.object({ id: z.string(), content: z.string(), type: z.string(), createdBy: z.string().nullable(), createdAt: z.string() })
+  ),
+});
 
 function toApiListing(l: Listing): ApiListing {
   return {
     id: l.listing_id,
     address: l.address_string || "",
-    assignee: l.assignee,
-    dueDate: l.due_date,
+    assignee: l.assignee ?? null,
+    dueDate: l.due_date ?? null,
     status: l.status as Status,
-    progress: (l as any).progress as number | undefined,
+    progress: (() => {
+      const p = (l as any).progress;
+      if (typeof p === 'number') return p;
+      if (p && typeof p === 'object' && typeof p.pct === 'number') return p.pct;
+      return null;
+    })(),
     createdAt: l.created_at,
     updatedAt: l.updated_at,
   };
 }
 
 export default async function listingsRoutes(app: FastifyInstance) {
-  app.get("/v1/operations/listings", async (req, reply) => {
-    try {
+  app.withValidation({
+    method: "GET",
+    url: "/v1/operations/listings",
+    validation: {
+      query: listingsQuerySchema,
+      response: { 200: listingsResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
       const { status, page, limit, sortBy } = (req.query as any) || {};
-      // Validate and coerce
-      const allowedStatus: Record<string, true> = { new: true, in_progress: true, completed: true };
-      const statusFilter: Status | undefined = status && allowedStatus[status] ? (status as Status) : undefined;
+      const statusFilter: Status | undefined = status as Status | undefined;
       const pageNum = Math.max(1, Number(page ?? 1) || 1);
       const limitNum = Math.min(100, Math.max(1, Number(limit ?? 25) || 25));
-      const sortField: SortBy = (sortBy === "created_at" || sortBy === "due_date" || sortBy === "address") ? sortBy : "created_at";
+      const sortField: SortBy = sortBy ?? "created_at";
 
-      let items: Listing[] = [];
-      if (statusFilter) {
-        // Pull a generous window, then paginate in-memory
-        items = await queryListingsByStatus(statusFilter, "", 1000);
-      } else {
-        items = await queryListingsByCreatedAt("", 1000);
-      }
+      const items = statusFilter
+        ? await queryListingsByStatus(statusFilter, "", 1000)
+        : await queryListingsByCreatedAt("", 1000);
 
-      // Sort in-memory as needed
       items.sort((a, b) => {
-        if (sortField === "address") {
-          const aa = a.address_string || "";
-          const bb = b.address_string || "";
-          return aa.localeCompare(bb);
-        }
-        if (sortField === "due_date") {
-          const ad = a.due_date || "";
-          const bd = b.due_date || "";
-          return ad.localeCompare(bd);
-        }
-        // created_at default
+        if (sortField === "address") return (a.address_string || "").localeCompare(b.address_string || "");
+        if (sortField === "due_date") return (a.due_date || "").localeCompare(b.due_date || "");
         return a.created_at.localeCompare(b.created_at);
       });
 
       const total = items.length;
       const totalPages = Math.max(1, Math.ceil(total / limitNum));
       const start = (pageNum - 1) * limitNum;
-      const pageItems = items.slice(start, start + limitNum).map(toApiListing);
+      const pageItems = items.slice(start, start + limitNum).map((item) => {
+        const api = toApiListing(item);
+        return {
+          id: api.id,
+          address: api.address,
+          assignee: api.assignee,
+          dueDate: api.dueDate,
+          status: api.status,
+          progress: api.progress,
+          createdAt: api.createdAt,
+          updatedAt: api.updatedAt,
+        };
+      });
 
       return reply.send({
         listings: pageItems,
         pagination: { page: pageNum, limit: limitNum, total, totalPages },
       });
-    } catch (err: any) {
-      req.log.error({ err }, "Failed to list listings");
-      return reply.code(500).send({ error: "Internal Server Error" });
-    }
+    },
   });
 
-  app.get("/v1/operations/listings/:id", async (req, reply) => {
-    try {
+  app.withValidation({
+    method: "GET",
+    url: "/v1/operations/listings/:id",
+    validation: {
+      params: listingParamsSchema,
+      response: { 200: listingResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
       const { id } = req.params as any;
-      if (!id || typeof id !== "string") {
-        return reply.code(400).send({ error: "Invalid id" });
-      }
       const item = await getListingById(id);
-      if (!item) {
-        return reply.code(404).send({ error: "Not Found" });
-      }
-      return reply.send(toApiListing(item));
-    } catch (err: any) {
-      req.log.error({ err }, "Failed to get listing by id");
-      return reply.code(500).send({ error: "Internal Server Error" });
-    }
+      if (!item) return reply.code(404).send({ error: "Not Found" });
+      const api = toApiListing(item);
+      return reply.send({
+        id: api.id,
+        address: api.address,
+        assignee: api.assignee ?? null,
+        dueDate: api.dueDate ?? null,
+        status: api.status,
+        progress: api.progress ?? null,
+        createdAt: api.createdAt,
+        updatedAt: api.updatedAt,
+      });
+    },
   });
 
-  app.get("/v1/operations/listings/:id/details", async (req, reply) => {
-    try {
+  app.withValidation({
+    method: "GET",
+    url: "/v1/operations/listings/:id/details",
+    validation: {
+      params: listingParamsSchema,
+      response: { 200: listingDetailsResponseSchema },
+    },
+    async handler(req: FastifyRequest, reply: FastifyReply) {
       const { id } = req.params as any;
-      if (!id || typeof id !== "string") {
-        return reply.code(400).send({ error: "Invalid id" });
-      }
-
       const l = await getListingById(id);
       if (!l) return reply.code(404).send({ error: "Not Found" });
 
-      const [history, tasks] = await Promise.all([
+      const [historyEvents, taskItems] = await Promise.all([
         (async () => {
           const key = `listing#${id}`;
           const mod = await import("../db/audit_log");
-          const events = await mod.queryListingHistory(key, "", 100);
-          return events.map((e: any) => ({
-            id: e.event_id,
-            action: e.action,
-            performedBy: e.performed_by,
-            timestamp: e.timestamp,
-            changes: e.changes || {},
-            content: e.content,
-            note_type: e.note_type,
-          }));
+          return mod.queryListingHistory(key, "", 100);
         })(),
         (async () => {
           const mod = await import("../db/tasks");
-          const items = await mod.queryListingTasks(id, "", 100);
-          return items.map((t: any) => ({ id: t.task_id, title: t.name, status: t.status, assignee: t.assigned_to?.username || t.assigned_to?.userId || "" }));
+          return mod.queryListingTasks(id, "", 100);
         })(),
       ]);
 
-      const notes = history.map((h: any) => ({
-        id: h.id,
-        content: h.content || "",
-        type: h.note_type || "general",
-        createdBy: h.performedBy || "",
-        createdAt: h.timestamp,
+      const history = historyEvents.map((e: any) => ({
+        id: e.event_id,
+        action: e.action,
+        performedBy: e.performed_by ?? null,
+        timestamp: e.timestamp,
+        changes: e.changes || undefined,
+        content: e.content,
+        noteType: e.note_type,
       }));
 
-      return reply.send({
+      const tasks = taskItems.map((t: any) => ({
+        id: t.task_id,
+        title: t.name,
+        status: t.status,
+        assignee: t.assigned_to?.userId ?? null,
+      }));
+
+      const notes = history
+        .filter((h) => h.content && h.noteType)
+        .map((h) => ({
+          id: h.id,
+          content: h.content as string,
+          type: h.noteType as string,
+          createdBy: h.performedBy,
+          createdAt: h.timestamp,
+        }));
+
+      return {
         listing: {
           id: l.listing_id,
           address: l.address_string || "",
-          assignee: l.assignee || "",
-          dueDate: l.due_date,
+          assignee: l.assignee ?? null,
+          dueDate: l.due_date ?? null,
           status: l.status,
-          progress: (l as any).progress ?? 0,
+          progress: (() => {
+            const p = (l as any).progress;
+            if (typeof p === 'number') return p;
+            if (p && typeof p === 'object' && typeof p.pct === 'number') return p.pct;
+            return null;
+          })(),
         },
         details: {
-          propertyType: l.property_type || "",
-          bedrooms: l.bedrooms || 0,
-          bathrooms: l.bathrooms || 0,
-          sqft: l.sqft || 0,
-          yearBuilt: l.year_built || 0,
-          listPrice: l.list_price || 0,
-          notes: l.notes || "",
+          propertyType: l.property_type ?? null,
+          bedrooms: l.bedrooms ?? 0,
+          bathrooms: l.bathrooms ?? 0,
+          sqft: l.sqft ?? 0,
+          yearBuilt: l.year_built ?? 0,
+          listPrice: l.list_price ?? 0,
+          notes: l.notes ?? null,
         },
-        history: history.map((h: any) => ({ id: h.id, action: h.action, performedBy: h.performedBy, timestamp: h.timestamp, changes: h.changes })),
+        history: history.map(({ content: _content, noteType: _noteType, ...rest }) => rest),
         tasks,
         notes,
-      });
-    } catch (err: any) {
-      req.log.error({ err }, "Failed to get listing details");
-      return reply.code(500).send({ error: "Internal Server Error" });
-    }
-  });
-
-  app.get("/v1/operations/board", async (_req, reply) => {
-    try {
-      async function getByStatus(status: string): Promise<Listing[]> {
-        const items = await queryListingsByStatus(status, "", 1000);
-        if (items.length > 0) return items;
-        const fallback = await queryListingsByCreatedAt("", 1000);
-        return fallback.filter((l) => (l.status || "").toLowerCase() === status);
-      }
-
-      const [newItems, inProgressItems, completedItems] = await Promise.all([
-        getByStatus("new"),
-        getByStatus("in_progress"),
-        getByStatus("completed"),
-      ]);
-
-      const columns = {
-        new: newItems.map((l) => ({ id: l.listing_id, address: l.address_string || "", assignee: l.assignee || "", dueDate: l.due_date || null })),
-        inProgress: inProgressItems.map((l) => ({ id: l.listing_id, address: l.address_string || "", assignee: l.assignee || "", dueDate: l.due_date || null, progress: (l as any).progress ?? 0 })),
-        completed: completedItems.map((l) => ({ id: l.listing_id, address: l.address_string || "", assignee: l.assignee || "", completedDate: l.completed_at || l.updated_at })),
-      } as const;
-
-      const now = Date.now();
-      const overdueCount = [...newItems, ...inProgressItems].filter((l) => !!l.due_date && new Date(l.due_date as string).getTime() < now).length;
-      const summary = {
-        totalNew: columns.new.length,
-        totalInProgress: columns.inProgress.length,
-        totalCompleted: columns.completed.length,
-        totalOverdue: overdueCount,
       };
-
-      return reply.send({ columns, summary });
-    } catch (err: any) {
-      (reply as any).request?.log?.error?.({ err }, "Failed to get board view");
-      return reply.code(500).send({ error: "Internal Server Error" });
-    }
+    },
   });
+
+  // Board route moved to `src/routes/board.ts` and registered separately.
 }
