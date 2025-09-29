@@ -33,6 +33,8 @@
     "seed": "NODE_ENV=local ts-node scripts/seed.ts",
     "seed:from-fe": "NODE_ENV=local ts-node --transpile-only scripts/seed-from-frontend.ts",
     "seed:reset": "NODE_ENV=local ts-node scripts/seed-reset.ts",
+    "test:llm": "NODE_ENV=local ts-node --transpile-only scripts/test-llm-classifier.ts",
+    "slack:listen": "NODE_ENV=local ts-node --transpile-only scripts/slack-live-listener.ts",
     "docker:build": "docker build -t archieos-app .",
     "docker:up": "docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build",
     "docker:down": "docker compose down -v"
@@ -65,6 +67,9 @@
     "module-alias": "^2.2.3",
     "node-fetch": "^3.3.2",
     "openai": "^4.56.0",
+    "@slack/bolt": "^3.17.0",
+    "@slack/rtm-api": "^7.0.0",
+    "@slack/socket-mode": "^3.0.0",
     "pino-std-serializers": "^7.0.0",
     "prom-client": "^15.1.3",
     "ulid": "^3.0.1",

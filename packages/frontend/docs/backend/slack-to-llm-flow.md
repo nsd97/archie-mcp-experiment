@@ -154,6 +154,24 @@ graph TD
   - Listings: `src/routes/listings.ts`
   - Tasks: `src/routes/tasks.ts`
 
+## Current LLM prompt and output (classification_v1)
+
+- System: ultra-brief, enforces “JSON only”. No prose, no code fences.
+- Developer spec: describes message types (GROUP, STRAY, INFO_REQUEST, IGNORE), allowed `group_key` and `task_key` values, extraction and tie-break rules.
+- Few-shot: short anchors for GROUP, STRAY, INFO_REQUEST, IGNORE.
+- Runtime user content: the Slack message text only.
+- Structured Outputs: we pass a JSON Schema to the LLM so it must return a valid object:
+  - `schema_version: 1`
+  - `message_type`: GROUP | STRAY | INFO_REQUEST | IGNORE
+  - `task_key` (for STRAY) or `group_key` (for GROUP)
+  - `listing: { type: 'LEASE'|'SALE'|null, address: string|null }`
+  - `assignee_hint: string|null`, `due_date: string|null` (ISO), `confidence: number`, `explanations: string[]|null`
+
+What happens next:
+- GROUP → expand `group_key` to default tasks via `src/services/taskKeyMappings.ts`, create listing and tasks
+- STRAY → map `task_key` to a single task via `taskKeyMappings.ts`, store as stray
+- INFO_REQUEST/IGNORE → write audit entry only
+
 ## Notes and settings
 
 - Turn LLM step on/off: `USE_LLM_CLASSIFIER` (true/false)

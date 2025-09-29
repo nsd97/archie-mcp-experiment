@@ -5,6 +5,7 @@ import { ddb } from "../db/client";
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { putListing } from "../db/listings";
 import { putTask } from "../db/tasks";
+import { expandGroupKeyToTasks, mapTaskKey } from "./taskKeyMappings";
 import { captureAsync } from "./xray";
 
 const INTAKE_QUEUE_URL = process.env.INTAKE_QUEUE_URL || "http://localhost:4566/000000000000/intake-queue";
@@ -23,9 +24,12 @@ export async function pollAndIngestOnce(maxMessages = 5) {
   let processed = 0;
   for (const m of recv.Messages) {
     try {
-      const payload = JSON.parse(m.Body || "{}");
-      if (payload?.schema_version !== 1) throw new Error("invalid schema");
-      const eventId = payload.ts || payload.raw?.event?.event_ts || payload.raw?.event_id || m.MessageId;
+      const envelope = JSON.parse(m.Body || "{}");
+      // New envelope shape from classifier: { schema:'classification_v1', idempotency_key, source, payload, links, attachments }
+      const isNewEnvelope = envelope && typeof envelope === 'object' && envelope.schema === 'classification_v1' && envelope.payload;
+      const payload = isNewEnvelope ? envelope.payload : envelope;
+      if (!payload || payload.schema_version !== 1) throw new Error("invalid schema");
+      const eventId = (isNewEnvelope && envelope.idempotency_key) || payload.ts || payload.raw?.event?.event_ts || payload.raw?.event_id || m.MessageId;
       // Idempotency via intake_events table
       const table = process.env.INTAKE_EVENTS_TABLE || 'intake_events';
       const existing = await ddb.send(new GetCommand({ TableName: table, Key: { event_id: String(eventId) } }));
@@ -38,31 +42,37 @@ export async function pollAndIngestOnce(maxMessages = 5) {
       // Idempotency could be enforced via intake_events table (omitted minimal stub)
       // Map normalized payload to domain writes
       await captureAsync('intakeIngest', async () => {
-        const intent = payload.intent as string | undefined;
-        if (intent === 'CREATE_LISTING') {
+        const mt = (payload.message_type as string | undefined) || '';
+        if (mt === 'GROUP') {
           const l = payload.listing || {};
           const listing = await putListing({ type: l.type || 'SALE', status: 'new', address_string: l.address || 'Unknown' } as any);
-          for (const t of payload.tasks || []) {
-            await putTask({ listing_id: listing.listing_id, name: t.title || t.task_type, status: 'OPEN', task_def_id: t.task_type, inputs: t.inputs } as any);
+          const tasks = expandGroupKeyToTasks(payload.group_key);
+          for (const t of tasks) {
+            await putTask({
+              listing_id: listing.listing_id,
+              name: t.title,
+              status: 'OPEN',
+              task_def_id: t.defId,
+              is_stray: false,
+              due_date: typeof payload.due_date === 'string' ? payload.due_date : undefined,
+            } as any);
           }
-          await putAuditEvent({ entity_type: 'listing', entity_id: listing.listing_id, action: 'CREATED_FROM_INTAKE', content: JSON.stringify(payload) } as any);
-        } else if (intent === 'ADD_TASKS_TO_LISTING') {
-          const lId = payload.listing?.address || payload.source?.channel_id; // simplistic mapping fallback
-          if (lId) {
-            for (const t of payload.tasks || []) {
-              await putTask({ listing_id: lId, name: t.title || t.task_type, status: 'OPEN', task_def_id: t.task_type, inputs: t.inputs } as any);
-            }
-            await putAuditEvent({ entity_type: 'listing', entity_id: lId, action: 'TASKS_ADDED_FROM_INTAKE', content: JSON.stringify(payload) } as any);
-          }
-        } else if (intent === 'CREATE_STRAY_TASK') {
-          for (const t of payload.tasks || []) {
-            await putTask({ listing_id: 'stray', name: t.title || t.task_type, status: 'OPEN', task_def_id: t.task_type, inputs: t.inputs, task_category: payload.stray?.category_hint, is_stray: true } as any);
-          }
-          await putAuditEvent({ entity_type: 'stray', entity_id: 'stray', action: 'STRAY_TASKS_FROM_INTAKE', content: JSON.stringify(payload) } as any);
-        } else if (intent === 'INFO_REQUEST') {
-          await putAuditEvent({ entity_type: 'intake', entity_id: 'slack', action: 'INFO_REQUESTED', content: JSON.stringify(payload.meta?.explanations || []) } as any);
+          await putAuditEvent({ entity_type: 'listing', entity_id: listing.listing_id, action: 'CREATED_FROM_CLASSIFICATION', content: JSON.stringify(payload) } as any);
+        } else if (mt === 'STRAY') {
+          const mapped = mapTaskKey(payload.task_key);
+          await putTask({
+            listing_id: 'stray',
+            name: mapped.title,
+            status: 'OPEN',
+            task_def_id: mapped.defId,
+            is_stray: true,
+            due_date: typeof payload.due_date === 'string' ? payload.due_date : undefined,
+          } as any);
+          await putAuditEvent({ entity_type: 'stray', entity_id: 'stray', action: 'STRAY_TASK_FROM_CLASSIFICATION', content: JSON.stringify(payload) } as any);
+        } else if (mt === 'INFO_REQUEST') {
+          await putAuditEvent({ entity_type: 'intake', entity_id: 'slack', action: 'INFO_REQUESTED', content: JSON.stringify(payload.explanations || []) } as any);
         } else {
-          await putAuditEvent({ entity_type: 'intake', entity_id: 'slack', action: 'INGESTED', content: payload.type } as any);
+          await putAuditEvent({ entity_type: 'intake', entity_id: 'slack', action: 'INGESTED', content: mt || 'UNKNOWN' } as any);
         }
       });
       await ddb.send(new PutCommand({ TableName: table, Item: { event_id: String(eventId), processed_at: new Date().toISOString() } }));
