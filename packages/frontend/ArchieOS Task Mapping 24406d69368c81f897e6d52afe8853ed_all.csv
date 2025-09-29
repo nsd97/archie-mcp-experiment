@@ -1,0 +1,108 @@
+﻿Task,ARTIFACTS/ Outputs,Agent View,Comments,Date,Parent item,RESOURCES,Responsibility,Select,Status,Sub-item,TRIGGER,Type
+Update EARE TV & lease tracking sheets,,,Data updated.,,,,AI,,Not started,,,Lease Listing – Closing Tasks
+"Arrange sign, lockbox & QR code installation",,Archie texts agent with updates,AI assigns the task to Bruce; installation itself is physical.,,,"Adress, Dates, Lock box number from agent",Hybrid,Brokerage Specific,Not started,,,Sale Listing – Active Tasks
+Update sign & lockbox spreadsheet,,,Inventory updated.,,,,AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Switch conditional tab to firm on financial tracking sheets,,,AI updates spreadsheets.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Sold Tasks
+Update EARE TV and sales tracking sheets,,,System updates spreadsheets.,,,,AI,,Not started,,,Sale Listing – Closing Tasks
+"Arrange sign,",chosen date,,AI requests installation; Bruce physically installs.,,,"Adress, Agent, Deal Type, property type",Hybrid,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Send lease package to landlord,,,AI forwards documents for review.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Turn off showings on BrokerBay,,,AI asks agent and executes.,,,,Hybrid,,Not started,,,Lease Listing – Leased Tasks
+Send agreement for signatures via e‑sign,,,AI manages signature process.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Send congratulations email to tenant,,,Automated email.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Move listing folder to Closed Deals,,,Archive folder.,,,,AI,,Not started,,,Sale Listing – Closing Tasks
+Email co‑op agent requesting buyer’s lawyer info,,,AI sends standard request.,,,,AI,,Not started,,,Sale Listing – Sold Tasks
+Send final congratulations email after closing,,,Automatically sent if applicable.,,,,AI,,Not started,,,Sale Listing – Closing Tasks
+File signed paperwork,,,Stored automatically.,,,,AI,Universal,Not started,,,Lease Listing – Active Tasks
+Upload signed lease to Skyslope,,,Automated upload.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Compile Skyslope paperwork,,,AI assembles and uploads necessary forms.,,,,AI,Universal,Not started,,,Sale Listing – Sold Tasks
+Send Text to Agent Just Listed,,,AI posts announcement.,,,,AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Request complete lease application package,,,AI requests documents; human verifies content.,,,,Hybrid,,Not started,,,Lease Listing – Leased Tasks
+Configure BrokerBay showing instructions & screenshot,,,AI sets up; agent may adjust preferences.,,,,Hybrid,Universal,Not started,,,Lease Listing – Active Tasks
+Draft MLS & Cornerstone listing,,"Archie texts agent a pdf with listing draft ready to go and awaits feedback, also asks for any missing info","LLM generates draft description and metadata after receiving all needed information and photos ",,,Questionare,AI,Universal,In progress,,,Sale Listing – Active Tasks
+Update sales tracking sheets,,,Spreadsheets updated.,,,,AI,Brokerage Specific,Not started,,,Buyer Deal – Closing Tasks
+Update EARE TV spreadsheet,,,AI records listing details.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Active Tasks
+Collect signed waiver/Notice of Fulfillment,,,AI requests signatures via e‑sign.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Prepare paperwork and send for signatures,,,As with sale listing.,,,"commencement date, commision, expirary date 90 days",AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Prepare listing paperwork and send for signature,,Email or text from Archie,"AI fills templates (Reco Info Guide, Listing Agreement, etc.) and sends via e‑signature.",,,,AI,Universal,Not started,,,Sale Listing – Active Tasks
+Archive Slack threads related to deal,,,Conversations archived.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Move listing folder to Closed Leases,,,Archive folder.,,,,AI,,Not started,,,Lease Listing – Closing Tasks
+Fill out deal information sheet & send for signature,,,AI pre‑populates forms and manages e‑signatures.,,,,AI,Universal,Not started,,,Sale Listing – Sold Tasks
+Send just‑listed group message,,,AI announces the listing.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Active Tasks
+Verify conditions satisfied or waived,,,AI tracks conditions and alerts; human confirms compliance.,,,,Hybrid,,Not started,,,Buyer Deal – Closing Tasks
+Prepare Skyslope paperwork,,,Automatic upload.,,,,AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Post listing live on TRREB/Cornerstone,,,"Listings must be manually broker‑loaded via TRREB’s Add Listing interfacehttps://www.torontomls.net/webhelp/Content/Resources/Add%20and%20Edit%20Listings.pdf#:~:text=About%20Add%2FEdit%20To%20add%20and,it%20available%20to%20MLS%20members; AI prepares data but a human posts and submits.",,,,Human,Universal,Not started,,,Sale Listing – Active Tasks
+Update boards (TRREB & Cornerstone) to “Conditional”,,,Status changes must be entered manually through MLS systems.,,,,Human,Universal,Not started,,,Sale Listing – Sold Tasks
+Book photos,"Added to agents callander, Booked photographer",,AI schedules; human vendor executes.,,,"Adress, Agent, Availability, Deal Type, Square footage, property type",Hybrid,Universal,Not started,,,Lease Listing – Active Tasks
+Update EARE TV spreadsheet,,,Listing details logged.,,,,AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Update lease tracking sheets,,,Spreadsheets updated.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Send deposit documents to deals email & Skyslope,,,AI forwards documents; human compliance team issues the brokerage receipt.,,,,Hybrid,Universal,Not started,,,Sale Listing – Sold Tasks
+Send congratulations email to clients,,,Automated email drafted and sent.,,,,AI,,Not started,,,Sale Listing – Sold Tasks
+Change Internal status to “Live”,,,Automated update.,,,,AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Create “Accepted Lease” folder,,,Folder created.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Request BrokerBay instructions,,Archie texts agent requesting the information,AI asks the agent and stores the response.,,,,AI,Universal,Not started,,,Sale Listing – Active Tasks
+Update boards to “Firm”,,,Final status changes require manual MLS entry.,,,,Human,,Not started,,,Sale Listing – Sold Tasks
+Send lawyer email package,,,AI prepares and sends legal package.,,,,AI,,Not started,,,Sale Listing – Sold Tasks
+"Request bank draft, deposit slip, paperwork & IDs",,,"AI requests documentation; human verifies deposit slips and identity due to FINTRAC ruleshttps://fintrac-canafe.canada.ca/guidance-directives/client-clientele/client/real-eng#:~:text=If%20you%20are%20a%20real,26.",,,,Hybrid,Universal,Not started,,,Sale Listing – Sold Tasks
+Announce in #alwaysbeclosing & #deals Slack channels,,,AI posts updates.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Sold Tasks
+Schedule follow‑up one month after move‑in,,,Reminder scheduled.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Create tenant folder in Closed Leases,,,Folder created.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Create property notes & description,,,AI drafts narrative.,,,,AI,Universal,Not started,,,Lease Listing – Active Tasks
+Create buyer folder in Pending Deals,,,Folder created.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Create “Accepted Listing” folder,,,Folder created in the workspace.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Sold Tasks
+Arrange sign & lockbox removal,,,AI schedules; Bruce physically removes hardware.,,,,Hybrid,,Not started,,,Lease Listing – Leased Tasks
+Send key exchange instructions,,,AI sends instructions and coordinates.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Review Skyslope for closing completeness,,,AI checks document completeness; human reviews compliance before closing.,,,,Hybrid,,Not started,,,Sale Listing – Closing Tasks
+Schedule closing date in calendars,,,Calendar integration used.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Log lockbox number,Logged Lock Box Number,,AI records; human reads number from lockbox.,,,,Hybrid,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Request BrokerBay instructions from agent,,,AI asks and records.,,,"if 9-9 showings are fine, location of lockbox, lock box code, option to confirm, spcial instructions, who can confirm or deny showing and contact info",AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Add deal paperwork to Skyslope,,,Documents uploaded.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Ask agent about gift basket,,,AI prompts agent and records the answer.,,,,AI,,Not started,,,Sale Listing – Closing Tasks
+Arrange installation of sold rider,,,AI assigns task to Bruce; physical installation by human.,,,,Hybrid,,Not started,,,Sale Listing – Sold Tasks
+Ensure tenant insurance proof received,,,AI requests documentation; human verifies proof.,,,,Hybrid,,Not started,,,Lease Tenant Deal – Closing Tasks
+Send congratulations email to buyer,,,Automated email.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Create listing workspace in Database,"Folder created in drive, Folders in folders",,Same as sale listing.,,,"Adress, Agent, Deal Type",AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Draft TREB listing for approval,,,LLM drafts description; human posts to MLS.,,,"Adress, Agent, Location, Mpac Report from geowarehouse, Questionare, Square footage, Type of Sale, Type of house, photos",Hybrid,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Log lockbox number,Logged Lock Box Number,Archie tells agent the number,Archie records the number once provided from bruce.,,,Lock box number from agent,Hybrid,Universal,Not started,,,Sale Listing – Active Tasks
+Update listing status on TRREB to “Leased”,,,Manual MLS update required.,,,,Human,,Not started,,,Lease Listing – Leased Tasks
+Create gift pick‑up task (if needed),,,AI schedules the task; gift preparation and pickup is physical.,,,,Hybrid,,Not started,,,Sale Listing – Closing Tasks
+Turn off showings on BrokerBay,,,AI asks the agent whether to disable showings and executes accordingly.,,,,Hybrid,Universal,Not started,,,Sale Listing – Sold Tasks
+Move listing folder to Pending Deals,,,File system updated.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Sold Tasks
+Create property notes & description,,,Archie drafts narrative and notes for admin to use,,,,AI,Universal,Not started,,,Sale Listing – Active Tasks
+Post listing live on TRREB,,,"Must be manually broker‑loadedhttps://www.torontomls.net/webhelp/Content/Resources/Add%20and%20Edit%20Listings.pdf#:~:text=About%20Add%2FEdit%20To%20add%20and,it%20available%20to%20MLS%20members.",,,,Human,Universal,Not started,,,Lease Listing – Active Tasks
+File signed paperwork,,,"Upon completion, AI stores documents in the workspace.",,,,AI,Universal,Not started,,,Sale Listing – Active Tasks
+Update EARE TV to Pending Deals,,,AI moves the listing from active to pending.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Sold Tasks
+Update lease tracking sheets,,,Updated automatically.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Send “Two Weeks Before Closing” emails (client & lawyer),,,Automated reminders sent.,,,,AI,,Not started,,,Sale Listing – Closing Tasks
+Send lawyer intro email package,,,AI generates and sends package.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Add seller questionnaire & send link,,Archie texts agent saying the questionnaire is being emailed,AI inserts the questionnaire into the workspace and sends a shareable link to the agent.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Active Tasks
+Add landlord questionnaire & send link,"Questionare created, Sent to agent/client",,AI attaches form and sends to agent.,,,"Adress, Agent, Deal Type, property type",AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Book photography,,Archie texts agent asking about proper times to have photos taken,AI proposes schedule and books preferred photographer.,,,"Adress, Agents requested time back and forth, Dates, Location, Suare Footage, Type of Sale, Type of house",AI,Universal,Not started,,,Sale Listing – Active Tasks
+Confirm key exchange details,,,AI coordinates with landlord and tenant agents.,,,,AI,,Not started,,,Lease Listing – Closing Tasks
+Move deal paperwork to Skyslope,,,Upload completed.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Confirm move‑in date with tenant & landlord,,,AI coordinates and records date.,,,,AI,,Not started,,,Lease Tenant Deal – Closing Tasks
+Send reminder emails one week before key exchange (landlord & tenant agent),,,Automated reminders.,,,,AI,,Not started,,,Lease Listing – Closing Tasks
+Update EARE TV to Leased,,,Move listing to leased category.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Configure BrokerBay showing instructions & store screenshot,,Archie texts for preferances.,Admin configures settings via integration and saves screenshots; agent may adjust preferences.,,,,Hybrid,Universal,Not started,,,Sale Listing – Active Tasks
+Send media kit email,,,Marketing email sent.,,,,AI,Brokerage Specific,Not started,,,Lease Listing – Active Tasks
+Create listing workspace,,,ArchieOS automatically generates a structured workspace/folder for the property.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Active Tasks
+Draft agreement to lease & send for review,,,LLM drafts; agent reviews.,,,,AI,,Not started,,,Lease Listing – Leased Tasks
+Set two‑week reminder for final walk‑through,,,Reminder scheduled.,,,,AI,,Not started,,,Buyer Deal – Closing Tasks
+Schedule closing‑related dates and reminders,,,"AI updates agent/admin calendars with deposit due dates, waivers and closing reminders.",,,,AI,,Not started,,,Sale Listing – Sold Tasks
+Prepare Skyslope listing paperwork,,,AI uploads necessary documents to Skyslope.,,,,AI,Universal,Not started,,,Sale Listing – Active Tasks
+Send media kit email,,,Creates and sends pre‑formatted marketing email.,,,,Human,Brokerage Specific,Not started,,,Sale Listing – Active Tasks
+Update sales tracking & agent sheets,,,Spreadsheets and drives updated automatically.,,,,AI,Brokerage Specific,Not started,,,Sale Listing – Sold Tasks
+,,,,,,,,,Not started,,,Lease Listing – Active Tasks
+Agent Gets Property To Sell and Tells Archie,,"Text Message to Archie, Archie asks for basic infromation",,,,Incoming Message,Agent,,Not started,,,Sale Listing – Active Tasks
+Draft (Treb + Cornerstone),,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Send MLS Drafts to Agent to Approve via Slack,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Tell Marketing to Update Website if there is a new price,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Send Listing Paperwork for Signatures (DO NOT POST LIVE UNTIL PAPERWORK IS SIGNED),,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Cancel Previous Listing (cancel and relist),,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+"Add Signed Paperwork to Listing Folder in a new folder called ""Re-list: Date”",,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Post Listing Live on TRREB + Cornerstone,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Configure Brokerbay Showing Instructions,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Send Slack message to #just-listed Channel,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Update EARE TV Spreadsheet with Listing Details (if price change and expiry change),,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Change expiry date on the signs & lbx spreadsheet,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+Skyslope Listing Paperwork,,,,,,,,,Not started,,,RE-LIST LISTING DEAL (SALE OR LEASE)
+"Deliver sign,  lockbox & QR code installation",,,,,,,,,Not started,,,Lease Listing – Active Tasks

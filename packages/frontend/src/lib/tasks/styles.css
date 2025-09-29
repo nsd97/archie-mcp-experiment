@@ -1,0 +1,69 @@
+.tsk-root {
+  --tsk-bg: hsl(0 0% 98%);
+  --tsk-border: hsl(0 0% 88%);
+  --tsk-muted: hsl(0 0% 45%);
+  --tsk-radius: 10px;
+  --tsk-gap: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tsk-gap);
+}
+
+.tsk-root[data-layout="stack"] {
+  display: flex;
+  flex-direction: column;
+}
+
+.tsk-root[data-layout="grid"] {
+  display: grid;
+  gap: var(--tsk-gap);
+}
+
+.tsk-component {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tsk-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--tsk-muted);
+}
+
+.tsk-output {
+  background: var(--tsk-bg);
+  border: 1px solid var(--tsk-border);
+  border-radius: var(--tsk-radius);
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.tsk-output--empty {
+  color: var(--tsk-muted);
+  font-style: italic;
+}
+
+.tsk-output--badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: hsl(221 83% 53% / 0.12);
+  color: hsl(221 83% 45%);
+}
+
+.tsk-output--scroll {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.tsk-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tsk-action-button {
+  border-radius: 8px;
+}

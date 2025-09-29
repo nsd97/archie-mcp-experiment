@@ -1,0 +1,9 @@
+# Ignore all by default in this temp area
+*
+
+# Keep these tracked for context
+!.gitignore
+!README.md
+!scratch.md
+
+

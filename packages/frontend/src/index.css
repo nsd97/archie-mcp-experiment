@@ -1,0 +1,306 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+Design system home base. Follow these guardrails when styling:
+1. Colors: reference tokens via Tailwind utilities (e.g. `bg-primary`, `text-muted-foreground`).
+   If you need a new value, add it here as an HSL variable first.
+2. Surfaces: overlays use the `overlay` token family (`bg-overlay`, `bg-overlay-light`, etc.).
+   Glassy controls lean on the `glass` tokens (`bg-glass`, `hover:bg-glass-hover`).
+3. Spacing & rhythm: compose layouts with the `stack-*` helpers for vertical rhythm
+   and `grid-gap-*` for grid spacing—no ad-hoc `space-y-*` scattered around.
+4. Motion & states: reach for `motion-fade` to introduce elements and
+   `state-copied` for copy feedback. Add new motion patterns here so they stay consistent.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 96%;
+    --foreground: 0 0% 20%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 20%;
+
+    --popover: 0 0% 98%;
+    --popover-foreground: 0 0% 20%;
+
+    --primary: 207 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 0% 88%;
+    --accent-foreground: 0 0% 20%;
+
+    --destructive: 4 100% 59%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 85%;
+    --input: 0 0% 85%;
+    --ring: 207 100% 50%;
+
+    --shadow-elegant: 0 10px 30px -10px hsl(0 0% 20% / 0.1);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --radius: 0.5rem;
+
+    /* Overlay & glass surfaces - pair with `bg-overlay*`, `bg-glass*`, or border utilities */
+    --overlay-strong: 0 0% 0% / 0.8;
+    --overlay-muted: 0 0% 0% / 0.6;
+    --overlay-light: 0 0% 100% / 0.18;
+    --glass-base: 0 0% 100% / 0.12;
+    --glass-hover: 0 0% 100% / 0.18;
+    --glass-border: 0 0% 100% / 0.24;
+
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 94%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 207 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 90%;
+    --sidebar-accent-foreground: 0 0% 20%;
+    --sidebar-border: 0 0% 85%;
+    --sidebar-ring: 207 100% 50%;
+
+    /* Category pastel colors (Jobsian taste: soft, airy, legible) */
+    --cat-stray: 210 14% 90%;
+    --cat-stray-border: 210 14% 82%;
+
+    --cat-sales-listing-active: 205 82% 88%;
+    --cat-sales-listing-active-border: 205 60% 78%;
+
+    --cat-lease-listing-active: 190 65% 88%;
+    --cat-lease-listing-active-border: 190 50% 76%;
+
+    --cat-sale-listing-closing: 45 100% 88%;
+    --cat-sale-listing-closing-border: 45 85% 76%;
+
+    --cat-sale-listing-sold: 130 45% 88%;
+    --cat-sale-listing-sold-border: 130 40% 76%;
+
+    --cat-lease-listing-leased: 125 50% 88%;
+    --cat-lease-listing-leased-border: 125 45% 76%;
+
+    --cat-lease-listing-closing: 30 100% 88%;
+    --cat-lease-listing-closing-border: 30 85% 76%;
+
+    --cat-buyer-deal-closing: 275 60% 90%;
+    --cat-buyer-deal-closing-border: 275 50% 78%;
+
+    --cat-lease-tenant-deal-closing: 340 60% 90%;
+    --cat-lease-tenant-deal-closing-border: 340 50% 78%;
+
+    --cat-relist-listing-deal: 355 70% 90%;
+    --cat-relist-listing-deal-border: 355 60% 80%;
+
+    /* Unified progress colors (consistent across cards) */
+    --progress-claimed: 207 100% 82%;
+    --progress-done: 207 100% 50%;
+  }
+
+  .dark {
+    --background: 0 0% 12%;
+    --foreground: 0 0% 88%;
+
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 88%;
+
+    --popover: 0 0% 15%;
+    --popover-foreground: 0 0% 88%;
+
+    --primary: 207 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 88%;
+
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 0 0% 22%;
+    --accent-foreground: 0 0% 88%;
+
+    --destructive: 4 100% 59%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 25%;
+    --input: 0 0% 25%;
+    --ring: 207 100% 50%;
+
+    --overlay-strong: 0 0% 100% / 0.8;
+    --overlay-muted: 0 0% 100% / 0.6;
+    --overlay-light: 0 0% 0% / 0.22;
+    --glass-base: 0 0% 0% / 0.2;
+    --glass-hover: 0 0% 0% / 0.28;
+    --glass-border: 0 0% 0% / 0.35;
+
+    /* Sidebar colors - dark theme */
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 88%;
+    --sidebar-primary: 207 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 18%;
+    --sidebar-accent-foreground: 0 0% 88%;
+    --sidebar-border: 0 0% 25%;
+    --sidebar-ring: 207 100% 50%;
+
+    /* Dark theme: slightly deeper pastels for contrast */
+    --cat-stray: 210 14% 24%;
+    --cat-stray-border: 210 14% 32%;
+
+    --cat-sales-listing-active: 205 60% 26%;
+    --cat-sales-listing-active-border: 205 55% 34%;
+
+    --cat-lease-listing-active: 190 55% 26%;
+    --cat-lease-listing-active-border: 190 50% 34%;
+
+    --cat-sale-listing-closing: 45 85% 26%;
+    --cat-sale-listing-closing-border: 45 80% 34%;
+
+    --cat-sale-listing-sold: 130 45% 26%;
+    --cat-sale-listing-sold-border: 130 40% 34%;
+
+    --cat-lease-listing-leased: 125 50% 26%;
+    --cat-lease-listing-leased-border: 125 45% 34%;
+
+    --cat-lease-listing-closing: 30 85% 26%;
+    --cat-lease-listing-closing-border: 30 80% 34%;
+
+    --cat-buyer-deal-closing: 275 60% 28%;
+    --cat-buyer-deal-closing-border: 275 55% 36%;
+
+    --cat-lease-tenant-deal-closing: 340 60% 28%;
+    --cat-lease-tenant-deal-closing-border: 340 55% 36%;
+
+    --cat-relist-listing-deal: 355 70% 28%;
+    --cat-relist-listing-deal-border: 355 60% 36%;
+
+    /* Unified progress colors (dark) */
+    --progress-claimed: 207 85% 36%;
+    --progress-done: 207 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Jobsian spacing & motion utilities
+   Use these as the canonical helpers in JSX: `stack-xl` for major sections,
+   `stack-lg` for subsections, `grid-gap-md` for balanced grids, etc. */
+@layer components {
+  /* Uniform modal sizing with internal scroll */
+  .modal-uniform {
+    height: 70vh;
+    max-height: 70vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+  .modal-scroll {
+    overflow: auto;
+  }
+  /* Category surfaces for full-card tint */
+  .category-surface {
+    background-color: hsl(var(--category-bg) / 0.18);
+    border-color: hsl(var(--category-border) / 0.4);
+  }
+
+  /* Two-shade progress (claimed underlay, done overlay) */
+  .category-progress {
+    position: relative;
+    height: 12px; /* big bar */
+    border-radius: 9999px;
+    background-color: hsl(var(--muted)); /* neutral track */
+    overflow: hidden;
+  }
+  .category-progress-claimed {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background-color: hsl(var(--progress-claimed));
+    opacity: 1;
+    z-index: 0;
+  }
+  .category-progress-done {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background-color: hsl(var(--progress-done));
+    opacity: 1; /* stronger done shade over claimed */
+    z-index: 1;
+  }
+
+  /* Small discreet category indicator (dot) */
+  .category-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background-color: hsl(var(--category-border));
+    border: 1px solid hsl(var(--category-border));
+    flex-shrink: 0;
+  }
+  /* Category badge pattern */
+  .category-badge {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border;
+    background-color: hsl(var(--category-bg, var(--muted)));
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--category-border, var(--border)));
+  }
+
+  /* Category mappings */
+  .is-cat-stray { --category-bg: var(--cat-stray); --category-border: var(--cat-stray-border); }
+  .is-cat-sales-listing-active { --category-bg: var(--cat-sales-listing-active); --category-border: var(--cat-sales-listing-active-border); }
+  .is-cat-lease-listing-active { --category-bg: var(--cat-lease-listing-active); --category-border: var(--cat-lease-listing-active-border); }
+  .is-cat-sale-listing-closing { --category-bg: var(--cat-sale-listing-closing); --category-border: var(--cat-sale-listing-closing-border); }
+  .is-cat-sale-listing-sold { --category-bg: var(--cat-sale-listing-sold); --category-border: var(--cat-sale-listing-sold-border); }
+  .is-cat-lease-listing-leased { --category-bg: var(--cat-lease-listing-leased); --category-border: var(--cat-lease-listing-leased-border); }
+  .is-cat-lease-listing-closing { --category-bg: var(--cat-lease-listing-closing); --category-border: var(--cat-lease-listing-closing-border); }
+  .is-cat-buyer-deal-closing { --category-bg: var(--cat-buyer-deal-closing); --category-border: var(--cat-buyer-deal-closing-border); }
+  .is-cat-lease-tenant-deal-closing { --category-bg: var(--cat-lease-tenant-deal-closing); --category-border: var(--cat-lease-tenant-deal-closing-border); }
+  .is-cat-relist-listing-deal { --category-bg: var(--cat-relist-listing-deal); --category-border: var(--cat-relist-listing-deal-border); }
+  .stack-xl {
+    @apply space-y-6; /* 24px vertical rhythm for major sections */
+  }
+
+  .stack-lg {
+    @apply space-y-4; /* 16px vertical rhythm for subsections */
+  }
+
+  .stack-md {
+    @apply space-y-2; /* 8px vertical rhythm for related elements */
+  }
+
+  .stack-sm {
+    @apply space-y-1; /* 4px vertical rhythm for tight clusters */
+  }
+
+  .grid-gap-md {
+    @apply gap-3; /* 12px grid gap for balanced layouts */
+  }
+
+  .grid-gap-xs {
+    @apply gap-0.5; /* 2px grid gap for tight media grids */
+  }
+
+  .state-copied {
+    @apply animate-pulse bg-primary/10;
+  }
+
+  .motion-fade {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}

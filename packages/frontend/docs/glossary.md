@@ -1,0 +1,45 @@
+## Glossary
+
+- **Operations Center**: The part of the app that shows listings and tasks. See `src/components/operations-center`.
+- **Listing**: A property record being worked on. See `types.ts` → `Listing`.
+- **Task**: A piece of work associated with a listing or stray. See `types.ts` → `Task`.
+- **Stray Task**: A task not grouped under a listing. See `WorkItemType` "STRAY".
+- **Work Item**: A logical group of tasks, such as a listing category. See `types.ts` → `WorkItem`.
+- **Playbook**: A collection of steps or tasks. Placeholder in this prototype. See `types.ts`.
+- **Claim**: Assign a task to yourself. POST `/v1/operations/tasks/:id/claim`.
+- **Unclaim**: Remove assignment. POST `/v1/operations/tasks/:id/unclaim`.
+- **Due Date**: When a task or listing is expected. ISO date string.
+- **Urgency Score**: Higher means more urgent; integer 0–100, mock logic only.
+- **Queue**: A bucket for strays (ADMIN or MARKETING). See `StrayQueue`.
+- **Admin Queue**: Stray queue for administrative tasks. See `ListingsQueue.tsx`.
+- **Marketing Queue**: Stray queue for marketing tasks. See `ListingsQueue.tsx`.
+- **Listing Status**: Column on the Listings board: NEW, IN_PROGRESS, DONE_POSTED.
+- **Task Status**: NEW, IN_PROGRESS, DONE. See `TaskStatus`.
+- **Outputs**: User-provided values written back to a task. POST `/outputs`.
+- **Inputs**: Pre-provided data used to render screens. See `TaskDetail.tsx` merge.
+- **Template Key**: Stable ID of a task template. See `templates.ts` and `definitions.ts`.
+- **Work Item Type**: Category like `SALES_LISTING_ACTIVE`. See `types.ts`.
+- **Snapshot**: Full `OperationsData` returned by the API. See `api.ts`.
+- **Mock API**: Local Express server serving `/v1`. See `mock-server/server.js`.
+- **Vite**: Frontend tooling for dev/build/preview. See `vite.config.ts`.
+- **React**: UI library used across the app. See `src/`.
+- **Tailwind**: Utility CSS framework. See `tailwind.config.ts`.
+- **shadcn/ui**: Ready-made React UI components. See `src/components/ui`.
+- **Radix**: Underlying primitives used by shadcn/ui. See imports in UI.
+- **Drag and Drop (DnD)**: Interaction to move items. See `Board.tsx` using `@hello-pangea/dnd`.
+- **React Query**: Data fetching/cache library. Initialized but not used for API. See `App.tsx`.
+- **Context Provider**: React context managing shared state. See `OperationsProvider`.
+- **Registry**: Maps component types and handlers. See `src/lib/tasks/registry.tsx`.
+- **Data Source**: Function that supplies output data. See `registry.tsx`.
+- **Transform**: Function that reshapes data from a data source. See `registry.tsx`.
+- **Action**: A button-driven operation on the screen. See `core.ts` and `TaskRenderer.tsx`.
+- **VisibleWhen**: Condition to show/hide components or actions. See `core.ts`.
+- **Task Renderer**: Component that renders screens from definitions. See `TaskRenderer.tsx`.
+- **Definitions**: Build `DefinedTask` objects from templates. See `definitions.ts`.
+- **Category Templates**: JSON list of task templates per category. See `shared/category-templates.json`.
+- **SimpleTaskForm**: Current minimal renderer for task outputs. See `SimpleTaskForm.tsx`.
+- **Archive**: View of recently done items. See `src/pages/ArchivePage.tsx`.
+- **History**: Timeline of events like CLAIMED or NOTE_ADDED. See `types.ts`.
+- **Attachment**: File metadata linked to a listing. See `types.ts`.
+- **Agent**: User performing work. See `types.ts`.
+- **OperationsData**: Root data structure the UI uses. See `types.ts`.
