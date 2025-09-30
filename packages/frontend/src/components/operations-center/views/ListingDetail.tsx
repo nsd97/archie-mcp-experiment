@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TaskDetailModal } from "./TaskDetailModal";
-import { CURRENT_OPERATIONS_USER_ID } from "../currentUser";
+import { CURRENT_USER_ID_RUNTIME } from "../currentUser";
 
 export const ListingDetail = ({ ops, listingId, onOpenTask }: { ops: OperationsState; listingId: string; onOpenTask: (id: string) => void }) => {
   const [note, setNote] = useState("");
@@ -37,15 +37,15 @@ export const ListingDetail = ({ ops, listingId, onOpenTask }: { ops: OperationsS
                   <div className="text-sm font-medium">{t.title}</div>
                   <div className="text-xs text-muted-foreground">
                     Status {t.status} • Due {new Date(t.dueDate).toLocaleDateString()}
-                    {t.claimedById && ` • ${t.claimedById === CURRENT_OPERATIONS_USER_ID ? 'Your task' : `Claimed by ${t.assignee || t.claimedById}`}`}
+                    {t.claimedById && ` • ${t.claimedById === CURRENT_USER_ID_RUNTIME ? 'Your task' : `Claimed by ${t.assignee || t.claimedById}`}`}
                   </div>
                   <div className="mt-2 flex gap-2">
                     {!t.claimedById ? (
-                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ops.claimTask(t.id, CURRENT_OPERATIONS_USER_ID); }}>Claim</Button>
-                    ) : t.claimedById === CURRENT_OPERATIONS_USER_ID ? (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ops.claimTask(t.id, CURRENT_USER_ID_RUNTIME); }}>Claim</Button>
+                    ) : t.claimedById === CURRENT_USER_ID_RUNTIME ? (
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ops.unclaimTask(t.id); }}>Unclaim</Button>
                     ) : null}
-                    {t.claimedById === CURRENT_OPERATIONS_USER_ID && (
+                    {t.claimedById === CURRENT_USER_ID_RUNTIME && (
                       <Button size="sm" onClick={(e) => { e.stopPropagation(); ops.markTaskDone(t.id); }}>Mark Done</Button>
                     )}
                   </div>
@@ -56,9 +56,14 @@ export const ListingDetail = ({ ops, listingId, onOpenTask }: { ops: OperationsS
 
           <div className="mb-4">
             <div className="text-sm font-medium mb-2">Add Note</div>
-            <div className="flex gap-2">
-              <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note..." />
-              <Button onClick={() => { if (note.trim()) { ops.addNote(listing.id, CURRENT_OPERATIONS_USER_ID, note.trim()); setNote(""); } }}>Add</Button>
+            <div className="flex items-center gap-2">
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Add a note"
+                className="min-h-[80px]"
+              />
+              <Button onClick={() => { if (note.trim()) { ops.addNote(listing.id, CURRENT_USER_ID_RUNTIME, note.trim()); setNote(""); } }}>Add</Button>
             </div>
           </div>
 

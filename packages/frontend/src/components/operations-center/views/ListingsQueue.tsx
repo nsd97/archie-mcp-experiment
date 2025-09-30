@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import type { Task } from "../types";
-import { CURRENT_OPERATIONS_USER_ID } from "../currentUser";
+import { CURRENT_USER_ID_RUNTIME } from "../currentUser";
 
 export const ListingsQueue = ({ ops, onOpenTask, onlyListingIds, taskFilter }: { ops: OperationsState; onOpenTask: (id: string) => void; onlyListingIds?: string[]; taskFilter?: (task: Task) => boolean }) => {
   const [_filterPlaybook] = useState<string | "all">("all");
@@ -72,6 +72,7 @@ export const ListingsQueue = ({ ops, onOpenTask, onlyListingIds, taskFilter }: {
               const workItem = ops.workItems.find(w => (w.listingId === group.listingId) && w.taskIds.some(id => listingTasks.some(t => t.id === id)))
                 || ops.workItems.find(w => w.listingId === group.listingId);
               const catClass = typeToClass(workItem?.type);
+              const defaultClaimTarget = listing?.agentId || CURRENT_USER_ID_RUNTIME;
               return (
                 <div key={group.listingId} className="rounded-md border">
                   <div className={`px-3 py-2 border-b category-surface ${catClass} flex items-center justify-between`}>
@@ -91,11 +92,9 @@ export const ListingsQueue = ({ ops, onOpenTask, onlyListingIds, taskFilter }: {
                           <div className="text-sm font-medium truncate">{t.title}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {!t.claimedById ? (
-                            <Button size="xs" variant="outline" onClick={(e) => { e.stopPropagation(); ops.claimTask(t.id, CURRENT_OPERATIONS_USER_ID); }}>Claim</Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Claimed</span>
-                          )}
+                          <Button size="xs" variant="outline" onClick={(e) => { e.stopPropagation(); if (defaultClaimTarget) { ops.claimTask(t.id, defaultClaimTarget); } }} disabled={!defaultClaimTarget}>
+                            {defaultClaimTarget ? "Claim" : "No agent"}
+                          </Button>
                         </div>
                       </div>
                     ))}

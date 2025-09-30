@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useOperations } from "../state";
 import type { OperationsState } from "../types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -7,10 +8,10 @@ import { ListingsView } from "./ListingsView";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import type { Task } from "../types";
-import { CURRENT_OPERATIONS_USER_ID } from "../currentUser";
+import { CURRENT_USER_ID_RUNTIME } from "../currentUser";
 
 export const MyTasksView = ({ ops, onOpenTask }: { ops: OperationsState; onOpenTask: (id: string) => void }) => {
-  const myId = CURRENT_OPERATIONS_USER_ID;
+  const myId = CURRENT_USER_ID_RUNTIME;
   const myTasks = useMemo(() => ops.tasks.filter(t => t.claimedById === myId && t.status !== "DONE"), [ops.tasks, myId]);
   const [mode, setMode] = useState<"queue" | "board">("queue");
   const myListingIds = useMemo(() => Array.from(new Set(myTasks.map(t => t.listingId).filter(Boolean))) as string[], [myTasks]);

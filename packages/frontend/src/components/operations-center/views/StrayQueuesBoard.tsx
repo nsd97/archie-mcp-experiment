@@ -3,7 +3,7 @@ import type { OperationsState } from "../types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { CURRENT_OPERATIONS_USER_ID } from "../currentUser";
+import { CURRENT_USER_ID_RUNTIME } from "../currentUser";
 
 export const StrayQueuesBoard = ({ ops }: { ops: OperationsState }) => {
   const admin = useMemo(() => ops.tasks.filter(t => !t.listingId), [ops.tasks]);
@@ -27,9 +27,12 @@ export const StrayQueuesBoard = ({ ops }: { ops: OperationsState }) => {
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     {!t.claimedById ? (
-                      <Button size="xs" variant="outline" onClick={() => ops.claimTask(t.id, CURRENT_OPERATIONS_USER_ID)}>Claim</Button>
+                      <Button size="xs" variant="outline" onClick={() => ops.claimTask(t.id, CURRENT_USER_ID_RUNTIME)}>Claim</Button>
                     ) : (
-                      <div className="text-xs text-muted-foreground">Claimed by {ops.agents.find(a => a.id === t.claimedById)?.name || t.claimedById}</div>
+                      <>
+                        <div className="text-xs text-muted-foreground flex-1">Claimed by {ops.agents.find(a => a.id === t.claimedById)?.name || t.claimedById}</div>
+                        <Button size="xs" variant="ghost" onClick={() => ops.unclaimTask(t.id)}>Unclaim</Button>
+                      </>
                     )}
                   </div>
                 </div>

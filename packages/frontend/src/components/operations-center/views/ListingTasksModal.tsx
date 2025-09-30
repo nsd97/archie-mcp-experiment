@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TaskDetailModal } from "./TaskDetailModal";
 import type { Task, OperationsState } from "../types";
-import { CURRENT_OPERATIONS_USER_ID } from "../currentUser";
+import { CURRENT_USER_ID_RUNTIME } from "../currentUser";
 
 export const ListingTasksModal = ({ ops, listingId, open, onOpenChange, taskFilter }: { ops: OperationsState; listingId: string | null; open: boolean; onOpenChange: (open: boolean) => void; taskFilter?: (task: Task) => boolean }) => {
   const listing = useMemo(() => listingId ? ops.listings.find(l => l.id === listingId) : undefined, [ops.listings, listingId]);
@@ -96,8 +96,8 @@ export const ListingTasksModal = ({ ops, listingId, open, onOpenChange, taskFilt
                 </div>
                 <div className="flex items-center gap-2">
                   {!t.claimedById ? (
-                    <Button size="sm" onClick={(e) => { e.stopPropagation(); ops.claimTask(t.id, CURRENT_OPERATIONS_USER_ID); }}>Claim</Button>
-                  ) : t.claimedById === CURRENT_OPERATIONS_USER_ID ? (
+                    <Button size="sm" onClick={(e) => { e.stopPropagation(); ops.claimTask(t.id, CURRENT_USER_ID_RUNTIME); }}>Claim</Button>
+                  ) : t.claimedById === CURRENT_USER_ID_RUNTIME ? (
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ops.unclaimTask(t.id); }}>Unclaim</Button>
                   ) : null}
                 </div>

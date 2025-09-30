@@ -59,15 +59,22 @@ export async function pollAndIngestOnce(maxMessages = 5) {
           }
           await putAuditEvent({ entity_type: 'listing', entity_id: listing.listing_id, action: 'CREATED_FROM_CLASSIFICATION', content: JSON.stringify(payload) } as any);
         } else if (mt === 'STRAY') {
+          console.log(`[intakeIngestor] Processing STRAY task:`, JSON.stringify(payload, null, 2));
           const mapped = mapTaskKey(payload.task_key);
-          await putTask({
+          // Determine category - brochure requests go to ADMIN
+          const category = payload.task_key === 'BROCHURE_REQUEST' ? 'ADMIN' : 'ADMIN';
+          const taskData = {
             listing_id: 'stray',
             name: mapped.title,
             status: 'OPEN',
             task_def_id: mapped.defId,
             is_stray: true,
+            task_category: `${category}#1`, // Required for stray-queues query
             due_date: typeof payload.due_date === 'string' ? payload.due_date : undefined,
-          } as any);
+            address: payload.listing?.address, // Include address if available
+          };
+          console.log(`[intakeIngestor] Creating stray task:`, JSON.stringify(taskData, null, 2));
+          await putTask(taskData as any);
           await putAuditEvent({ entity_type: 'stray', entity_id: 'stray', action: 'STRAY_TASK_FROM_CLASSIFICATION', content: JSON.stringify(payload) } as any);
         } else if (mt === 'INFO_REQUEST') {
           await putAuditEvent({ entity_type: 'intake', entity_id: 'slack', action: 'INFO_REQUESTED', content: JSON.stringify(payload.explanations || []) } as any);

@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { useOperations } from "../state";
 import { Board } from "../Board";
-import { CURRENT_OPERATIONS_USER_ID } from "../currentUser";
+import { CURRENT_USER_ID_RUNTIME } from "../currentUser";
 
 export const MyTasksBoard = () => {
   const ops = useOperations();
-  const myId = CURRENT_OPERATIONS_USER_ID;
+  const myId = CURRENT_USER_ID_RUNTIME;
   type Task = (typeof ops.tasks)[number];
 
   const byStatus = useMemo(() => {

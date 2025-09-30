@@ -48,16 +48,23 @@ const debugUserPlugin: FastifyPluginCallback = (app, _opts, done) => {
           : Array.isArray(rawHeader)
             ? rawHeader[0]
             : undefined;
-      if (!value) return;
+      if (!value) {
+        req.log.debug({ event: "debugUser", reason: "missing-header" }, "No X-Debug-User header provided");
+        return;
+      }
 
       const header = value.trim();
-      if (header.length === 0) return;
+      if (header.length === 0) {
+        req.log.debug({ event: "debugUser", reason: "empty-header" }, "X-Debug-User header was empty");
+        return;
+      }
 
       let parsed: any = undefined;
       if (header.startsWith("{")) {
         try {
           parsed = JSON.parse(header);
-        } catch {
+        } catch (err) {
+          req.log.warn({ event: "debugUser", reason: "invalid-json", header }, "Failed to parse X-Debug-User JSON header");
           parsed = undefined;
         }
       }
@@ -106,7 +113,8 @@ const debugUserPlugin: FastifyPluginCallback = (app, _opts, done) => {
           } else {
             user = { userId: key, provider: "debug", roles: [], groups: [] };
           }
-        } catch {
+        } catch (err) {
+          req.log.warn({ event: "debugUser", reason: "entity-lookup-error", err }, "Failed to fetch entity for debug user");
           user = { userId: key, provider: "debug", roles: [], groups: [] };
         }
       }
@@ -114,8 +122,8 @@ const debugUserPlugin: FastifyPluginCallback = (app, _opts, done) => {
       if (user) {
         req.user = user;
       }
-    } catch {
-      // Non-fatal: do nothing
+    } catch (err) {
+      req.log.error({ event: "debugUser", err }, "Failed to process X-Debug-User header");
     }
   });
   done();

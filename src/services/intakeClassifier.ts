@@ -203,10 +203,13 @@ function fallbackClassify(text: string | undefined): Pick<
   }
 
   const brochureKeywords = /(brochure|onesheet|one\s*sheet|flyer|marketing\s+packet)/i;
+  const designDocKeywords = /(design\s+doc|design\s+document|design\s+deck|design\s+presentation)/i;
+  const generalDocKeywords = /(create\s+the\s+doc|make\s+the\s+doc|prepare\s+doc|write\s+doc)/i;
 
   if (brochureKeywords.test(text)) {
-    return {
-      message_type: 'STRAY',
+    console.log(`[intakeClassifier] Detected brochure request: "${text}"`);
+    const result = {
+      message_type: 'STRAY' as const,
       task_key: 'BROCHURE_REQUEST',
       group_key: null,
       listing: { type: null, address },
@@ -215,6 +218,24 @@ function fallbackClassify(text: string | undefined): Pick<
       confidence: address ? 0.75 : 0.6,
       explanations: explanations.length ? explanations : null,
     };
+    console.log(`[intakeClassifier] Brochure classification:`, JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  if (designDocKeywords.test(text) || generalDocKeywords.test(text)) {
+    console.log(`[intakeClassifier] Detected document request: "${text}"`);
+    const result = {
+      message_type: 'STRAY' as const,
+      task_key: 'DOCUMENT_REQUEST',
+      group_key: null,
+      listing: { type: null, address },
+      assignee_hint: extractAssignee(text),
+      due_date: dueDate,
+      confidence: address ? 0.75 : 0.6,
+      explanations: explanations.length ? explanations : null,
+    };
+    console.log(`[intakeClassifier] Document classification:`, JSON.stringify(result, null, 2));
+    return result;
   }
 
   const groupKey = (() => {

@@ -71,6 +71,9 @@ export function mapTaskKey(taskKey: string): MappedTask {
 
     case "BROCHURE_REQUEST":
       return { title: "Create Listing Brochure" };
+    
+    case "DOCUMENT_REQUEST":
+      return { title: "Create Design Document" };
 
     default:
       return { title: taskKey };

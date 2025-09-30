@@ -6,7 +6,11 @@
  * them into the legacy frontend types.
  */
 import { dueProximity } from "@/lib/utils";
-import { CURRENT_OPERATIONS_USER_ID, CURRENT_OPERATIONS_USER } from "./currentUser";
+import {
+  CURRENT_OPERATIONS_USER,
+  CURRENT_USER_ID_RUNTIME,
+  buildOperationsDebugUserHeader,
+} from "./currentUser";
 import type {
   OperationsData,
   ListingStatus,
@@ -29,7 +33,7 @@ const DEBUG_USER_HEADER = (() => {
   if (raw && raw.trim()) {
     return raw.trim();
   }
-  return JSON.stringify(CURRENT_OPERATIONS_USER);
+  return buildOperationsDebugUserHeader();
 })();
 
 const LISTING_LIMIT = Number(import.meta.env.VITE_OPERATIONS_LISTING_LIMIT ?? 100);
@@ -433,7 +437,7 @@ const addListingTask = (
 const addStrayTask = (
   tasksMap: Map<string, Task>,
   agentsMap: Map<string, Agent>,
-  _queue: StrayQueue,
+  queue: StrayQueue,
   raw: Record<string, unknown>
 ) => {
   const id =
@@ -455,7 +459,7 @@ const addStrayTask = (
     claimedById,
     urgencyScore: computeUrgency(dueDate),
     type: toTaskType((typeof raw.taskCategory === "string" && raw.taskCategory) || undefined),
-    queue: "ADMIN",
+    queue,
     agentId: typeof raw.agentId === "string" ? raw.agentId : undefined,
     address: typeof raw.address === "string" ? raw.address : undefined,
     inputs: {},
@@ -471,6 +475,7 @@ const addStrayTask = (
 const addMyTask = (
   tasksMap: Map<string, Task>,
   listingLookup: Map<string, Listing>,
+  agentsMap: Map<string, Agent>,
   listingId: string | null,
   raw: Record<string, unknown>
 ) => {
@@ -484,6 +489,9 @@ const addMyTask = (
   const status = toTaskStatus((typeof raw.status === "string" && raw.status) || undefined);
   const listing = listingId ? listingLookup.get(listingId) : undefined;
 
+  const assignee = parseAssignee(raw.assignedTo ?? raw.assignee ?? raw.claimedBy ?? raw.owner);
+  const claimedById = assignee ? ensureAgent(agentsMap, assignee) ?? assignee.id : undefined;
+
   const base: Task = {
     id,
     title,
@@ -491,7 +499,7 @@ const addMyTask = (
     playbookId: undefined,
     status,
     dueDate,
-    claimedById: CURRENT_OPERATIONS_USER_ID,
+    claimedById,
     urgencyScore: computeUrgency(dueDate),
     type: toTaskType((typeof raw.taskCategory === "string" && raw.taskCategory) || undefined),
     queue: undefined,
@@ -504,7 +512,7 @@ const addMyTask = (
   };
 
   const existing = tasksMap.get(id);
-  tasksMap.set(id, existing ? { ...base, ...existing, claimedById: CURRENT_OPERATIONS_USER_ID } : base);
+  tasksMap.set(id, existing ? { ...existing, ...base } : base);
 };
 
 const addNotes = (
@@ -523,7 +531,7 @@ const addNotes = (
     const author =
       (typeof raw.createdBy === "string" && raw.createdBy) ||
       (typeof raw.performedBy === "string" && raw.performedBy) ||
-      CURRENT_OPERATIONS_USER_ID;
+      CURRENT_USER_ID_RUNTIME;
     const body =
       (typeof raw.content === "string" && raw.content) ||
       (typeof raw.text === "string" && raw.text) ||
@@ -569,7 +577,7 @@ export async function fetchOperationsState(): Promise<OperationsData> {
     safeFetch<EntitiesResponse>("/entities?type=AGENT"),
     jsonFetch<ListingsResponse>(`/operations/listings?limit=${LISTING_LIMIT}`),
     safeFetch<StrayQueuesResponse>("/operations/stray-queues"),
-    safeFetch<MyTasksResponse>(`/operations/my-tasks?userId=${encodeURIComponent(CURRENT_OPERATIONS_USER_ID)}`),
+    safeFetch<MyTasksResponse>(`/operations/my-tasks?userId=${encodeURIComponent(CURRENT_USER_ID_RUNTIME)}`),
     safeFetch<BoardResponse>("/operations/board"),
   ]);
 
@@ -583,8 +591,8 @@ export async function fetchOperationsState(): Promise<OperationsData> {
 
   const listings: Listing[] = (unwrap(listingsResRaw)?.listings ?? []).map((raw) => {
     const agentCandidate = parseAssignee(raw.assignee ?? raw.agent ?? raw.assignedTo);
-    const inferredAgentId = agentCandidate?.id ?? CURRENT_OPERATIONS_USER_ID;
-    const defaultAgentName = inferredAgentId === CURRENT_OPERATIONS_USER_ID ? "Noah Deskin" : inferredAgentId;
+    const inferredAgentId = agentCandidate?.id ?? CURRENT_USER_ID_RUNTIME;
+    const defaultAgentName = inferredAgentId === CURRENT_USER_ID_RUNTIME ? "Noah Deskin" : inferredAgentId;
     ensureAgent(agentsMap, agentCandidate ?? { id: inferredAgentId, name: defaultAgentName });
     const agentName = agentCandidate?.name ?? agentsMap.get(inferredAgentId)?.name ?? defaultAgentName;
 
@@ -648,7 +656,7 @@ export async function fetchOperationsState(): Promise<OperationsData> {
   if (myTasksRes?.listings) {
     for (const group of myTasksRes.listings) {
       for (const raw of group.tasks ?? []) {
-        addMyTask(tasksMap, listingLookup, group.listingId, raw);
+        addMyTask(tasksMap, listingLookup, agentsMap, group.listingId, raw);
       }
     }
   }
@@ -814,9 +822,9 @@ export async function apiUpdateTaskStatus(taskId: UUID, status: TaskStatus): Pro
     case "IN_PROGRESS":
       await mutate(
         `/operations/tasks/${taskId}/claim`,
-        { assigneeId: CURRENT_OPERATIONS_USER_ID },
+        { assigneeId: CURRENT_USER_ID_RUNTIME },
         "POST",
-        { path: `/operations/tasks/${taskId}/claim`, body: { assigneeId: CURRENT_OPERATIONS_USER_ID } }
+        { path: `/operations/tasks/${taskId}/claim`, body: { assigneeId: CURRENT_USER_ID_RUNTIME } }
       );
       break;
     default:

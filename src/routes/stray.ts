@@ -27,32 +27,24 @@ export default async function strayRoutes(app: FastifyInstance) {
     url: "/v1/operations/stray-queues",
     validation: { response: { 200: strayResponseSchema } },
     async handler(_req, _reply: FastifyReply) {
-      const categories = ["ADMIN", "MARKETING"];
-      const combined: Task[] = [];
-      for (const cat of categories) {
-        const key = `${cat}#1`;
-        const items: Task[] = await queryTasksByCategory(key, "", 100);
-        if (items && items.length > 0) {
-          combined.push(...items);
-        }
-      }
-      const queues = combined.length
-        ? [
-            {
-              category: "ADMIN",
-              isGeneric: true,
-              taskCount: combined.length,
-              tasks: combined.map((t) => ({
-                taskId: t.task_id,
-                title: t.name,
-                status: t.status,
-                canClaim: (t.claim_status ?? "UNASSIGNED") !== "CLAIMED",
-              })),
-            },
-          ]
-        : [];
-      const totalTasks = combined.length;
-      return { queues, totalTasks };
+      // Only query ADMIN category since all stray tasks go there
+      // The GSI key is task_category#is_stray, so for stray tasks it's "ADMIN#1"
+      const adminTasks: Task[] = await queryTasksByCategory("ADMIN#1#1", "", 100);
+      
+      return {
+        queues: [{
+          category: "ADMIN", 
+          isGeneric: true,
+          taskCount: adminTasks.length,
+          tasks: adminTasks.map((t) => ({
+            taskId: t.task_id,
+            title: t.name,
+            status: t.status,
+            canClaim: (t.claim_status ?? "UNASSIGNED") !== "CLAIMED",
+          })),
+        }],
+        totalTasks: adminTasks.length,
+      };
     },
   });
 }
