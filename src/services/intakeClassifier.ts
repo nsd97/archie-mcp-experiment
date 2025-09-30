@@ -285,7 +285,6 @@ function extractDueDate(text: string): string | null {
   const match = text.match(monthRegex);
   if (!match) return null;
   const [, monthName, dayStr, yearStr] = match;
-  if (!yearStr) return null;
   const monthMap: Record<string, string> = {
     january: '01',
     february: '02',
@@ -303,7 +302,23 @@ function extractDueDate(text: string): string | null {
   const month = monthMap[monthName.toLowerCase()];
   if (!month) return null;
   const day = dayStr.padStart(2, '0');
-  return `${yearStr}-${month}-${day}`;
+  // If year is missing, infer it as the next occurrence of the month/day.
+  // Use current year if the month/day has not passed yet; otherwise, next year.
+  const now = new Date();
+  let inferredYear: number;
+  if (yearStr && /^\d{4}$/.test(yearStr)) {
+    inferredYear = parseInt(yearStr, 10);
+  } else {
+    const currentYear = now.getFullYear();
+    const thisMonth = now.getMonth() + 1; // 1-12
+    const thisDay = now.getDate();
+    const targetMonth = parseInt(month, 10);
+    const targetDay = parseInt(day, 10);
+    const isLaterThisYear =
+      targetMonth > thisMonth || (targetMonth === thisMonth && targetDay >= thisDay);
+    inferredYear = isLaterThisYear ? currentYear : currentYear + 1;
+  }
+  return `${inferredYear}-${month}-${day}`;
 }
 
 function extractAssignee(text: string): string | null {
