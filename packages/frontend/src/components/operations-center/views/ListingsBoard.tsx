@@ -112,6 +112,7 @@ export const ListingsBoard = ({ ops, onOpenListing, onlyListingIds, taskFilter }
     const l = ops.listings.find(xx => xx.id === x.id);
     if (!l) return null;
     const agent = ops.agents.find(a => a.id === l.agentId);
+    const agentName = l.agentName || agent?.name;
     const allListingTasks = tasksByListingId[l.id] || [];
     const tasks = taskFilter ? (filteredTasksByListingId[l.id] || []) : allListingTasks;
     const workItemsForListing = workItemsByListingId[l.id] || [];
@@ -119,20 +120,6 @@ export const ListingsBoard = ({ ops, onOpenListing, onlyListingIds, taskFilter }
     const workItem = (taskIdSet ? workItemsForListing.find(w => w.taskIds.some(id => taskIdSet.has(id))) : undefined)
       || workItemsForListing[0];
     const catClass = typeToClass(workItem?.type);
-    const categoryLabel = (() => {
-      switch (workItem?.type) {
-        case "LEASE_LISTING_ACTIVE":
-        case "LEASE_LISTING_CLOSING":
-        case "LEASE_LISTING_LEASED":
-          return "Lease Listing";
-        case "SALES_LISTING_ACTIVE":
-        case "SALE_LISTING_CLOSING":
-        case "SALE_LISTING_SOLD":
-          return "Sales Listing";
-        default:
-          return undefined;
-      }
-    })();
 
     // Time-to-due progress (0 until 7 days out, then ramps to 100% at due)
     const duePct = Math.round(dueProximity(l.dueDate, 7) * 100);
@@ -157,8 +144,8 @@ export const ListingsBoard = ({ ops, onOpenListing, onlyListingIds, taskFilter }
             <span>{l.address}</span>
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-2">
-            {categoryLabel && <span>{categoryLabel} Active</span>}
-            <span>{agent?.name} • Due {new Date(l.dueDate).toLocaleDateString()}</span>
+            {agentName && <span>{agentName}</span>}
+            <span>Due {new Date(l.dueDate).toLocaleDateString()}</span>
           </div>
         </div>
         {/* Date badge with fill-behind progress (light grey), starting 7 days out */}

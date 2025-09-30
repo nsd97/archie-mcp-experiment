@@ -8,7 +8,7 @@ export const CURRENT_OPERATIONS_USER_ID = (import.meta.env.VITE_OPERATIONS_USER_
 export const CURRENT_OPERATIONS_USER = {
   userId: CURRENT_OPERATIONS_USER_ID,
   email: `${CURRENT_OPERATIONS_USER_ID}@example.com`,
-  name: CURRENT_OPERATIONS_USER_ID,
+  name: "Noah Deskin",
   groups: ["BOTH"],
   roles: [],
 };

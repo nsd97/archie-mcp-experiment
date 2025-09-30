@@ -67,7 +67,7 @@ export const ListingsQueue = ({ ops, onOpenTask, onlyListingIds, taskFilter }: {
           <div className="space-y-4">
             {grouped.map(group => {
               const listing = ops.listings.find(l => l.id === group.listingId);
-              const agent = listing && ops.agents.find(a => a.id === listing.agentId);
+              const agent = listing && (listing.agentName || ops.agents.find(a => a.id === listing.agentId)?.name);
               const listingTasks = ops.tasks.filter(t => t.listingId === group.listingId);
               const workItem = ops.workItems.find(w => (w.listingId === group.listingId) && w.taskIds.some(id => listingTasks.some(t => t.id === id)))
                 || ops.workItems.find(w => w.listingId === group.listingId);
@@ -77,7 +77,7 @@ export const ListingsQueue = ({ ops, onOpenTask, onlyListingIds, taskFilter }: {
                   <div className={`px-3 py-2 border-b category-surface ${catClass} flex items-center justify-between`}>
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{listing?.address || group.listingId}</div>
-                      <div className="text-xs text-muted-foreground truncate">{String(workItem?.type || "").replace(/_/g, " ")}{agent ? ` • ${agent.name}` : ""}</div>
+                      <div className="text-xs text-muted-foreground truncate">{agent ? `${agent}` : "Unassigned"}</div>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-sm font-semibold">{listing ? new Date(listing.dueDate).toLocaleDateString() : "—"}</div>

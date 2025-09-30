@@ -22,6 +22,7 @@ export interface Listing {
   address: string;
   status: ListingStatus;
   agentId: UUID;
+  agentName?: string;
   dueDate: string; // ISO date
   dealType?: string; // e.g., Sale, Lease, Buyer Deal, Tenant Deal
   propertyType?: string; // e.g., Condo, Detached, Townhouse

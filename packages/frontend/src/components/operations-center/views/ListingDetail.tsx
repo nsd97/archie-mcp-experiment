@@ -17,11 +17,14 @@ export const ListingDetail = ({ ops, listingId, onOpenTask }: { ops: OperationsS
 
   if (!listing) return null;
 
+  const agentName = listing.agentName || ops.agents.find(a => a.id === listing.agentId)?.name;
+
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: "2fr 1fr" }}>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">{listing.address}</CardTitle>
+          {agentName && <div className="text-xs text-muted-foreground">Agent {agentName}</div>}
         </CardHeader>
         <CardContent>
           <div className="text-xs text-muted-foreground mb-4">Due {new Date(listing.dueDate).toLocaleDateString()}</div>

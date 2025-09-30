@@ -69,6 +69,9 @@ export function mapTaskKey(taskKey: string): MappedTask {
     case "MUTUAL_RELEASE_STEPS":
       return { title: "Mutual Release Steps" };
 
+    case "BROCHURE_REQUEST":
+      return { title: "Create Listing Brochure" };
+
     default:
       return { title: taskKey };
   }

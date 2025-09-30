@@ -192,14 +192,6 @@ function fallbackClassify(text: string | undefined): Pick<
     ? 'SALE'
     : null;
 
-  const groupKey = (() => {
-    if (lower.includes('buyer lease')) return 'LEASE_LISTING' as const;
-    if (lower.includes('buyer sale')) return 'SALE_LISTING' as const;
-    if (listingType === 'LEASE') return 'LEASE_LISTING' as const;
-    if (listingType === 'SALE') return 'SALE_LISTING' as const;
-    return null;
-  })();
-
   const address = extractAddress(text);
   if (looksLikeListing && !address) {
     explanations.push('Could not extract address from message');
@@ -209,6 +201,29 @@ function fallbackClassify(text: string | undefined): Pick<
   if (!dueDate && /\bby\b|\bdue\b/.test(lower)) {
     explanations.push('Due date mentioned but not understood');
   }
+
+  const brochureKeywords = /(brochure|onesheet|one\s*sheet|flyer|marketing\s+packet)/i;
+
+  if (brochureKeywords.test(text)) {
+    return {
+      message_type: 'STRAY',
+      task_key: 'BROCHURE_REQUEST',
+      group_key: null,
+      listing: { type: null, address },
+      assignee_hint: extractAssignee(text),
+      due_date: dueDate,
+      confidence: address ? 0.75 : 0.6,
+      explanations: explanations.length ? explanations : null,
+    };
+  }
+
+  const groupKey = (() => {
+    if (lower.includes('buyer lease')) return 'LEASE_LISTING' as const;
+    if (lower.includes('buyer sale')) return 'SALE_LISTING' as const;
+    if (listingType === 'LEASE') return 'LEASE_LISTING' as const;
+    if (listingType === 'SALE') return 'SALE_LISTING' as const;
+    return null;
+  })();
 
   if (looksLikeListing) {
     return {
@@ -275,6 +290,7 @@ function sanitizeAddressSegment(segment: string): string | null {
   cleaned = cleaned.replace(/^(?:the\s+|a\s+|an\s+)/i, '');
   cleaned = cleaned.replace(/[.,!?]+$/, '');
   cleaned = cleaned.replace(/\s+(?:need|by|due|please|thanks)\b.*/i, '');
+  cleaned = cleaned.replace(/\s+for\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\b.*$/i, '');
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
   return cleaned.length ? cleaned : null;

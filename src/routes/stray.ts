@@ -27,25 +27,31 @@ export default async function strayRoutes(app: FastifyInstance) {
     url: "/v1/operations/stray-queues",
     validation: { response: { 200: strayResponseSchema } },
     async handler(_req, _reply: FastifyReply) {
-      const categories = ["ADMIN", "MARKETING"]; // basic set for now
-      const queues: any[] = [];
+      const categories = ["ADMIN", "MARKETING"];
+      const combined: Task[] = [];
       for (const cat of categories) {
         const key = `${cat}#1`;
         const items: Task[] = await queryTasksByCategory(key, "", 100);
-        if (!items || items.length === 0) continue;
-        queues.push({
-          category: cat,
-          isGeneric: true,
-          taskCount: items.length,
-          tasks: items.map((t) => ({
-            taskId: t.task_id,
-            title: t.name,
-            status: t.status,
-            canClaim: (t.claim_status ?? "UNASSIGNED") !== "CLAIMED",
-          })),
-        });
+        if (items && items.length > 0) {
+          combined.push(...items);
+        }
       }
-      const totalTasks = queues.reduce((sum, q) => sum + (q.taskCount || 0), 0);
+      const queues = combined.length
+        ? [
+            {
+              category: "ADMIN",
+              isGeneric: true,
+              taskCount: combined.length,
+              tasks: combined.map((t) => ({
+                taskId: t.task_id,
+                title: t.name,
+                status: t.status,
+                canClaim: (t.claim_status ?? "UNASSIGNED") !== "CLAIMED",
+              })),
+            },
+          ]
+        : [];
+      const totalTasks = combined.length;
       return { queues, totalTasks };
     },
   });

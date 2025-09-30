@@ -7,6 +7,7 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const userId = env.VITE_OPERATIONS_USER_ID || "agent-noah";
+  const debugUser = env.VITE_OPERATIONS_DEBUG_USER || JSON.stringify({ userId, email: `${userId}@example.com`, name: "Noah Deskin", groups: ["BOTH"], roles: [] });
 
   return {
     server: {

@@ -433,7 +433,7 @@ const addListingTask = (
 const addStrayTask = (
   tasksMap: Map<string, Task>,
   agentsMap: Map<string, Agent>,
-  queue: StrayQueue,
+  _queue: StrayQueue,
   raw: Record<string, unknown>
 ) => {
   const id =
@@ -455,7 +455,7 @@ const addStrayTask = (
     claimedById,
     urgencyScore: computeUrgency(dueDate),
     type: toTaskType((typeof raw.taskCategory === "string" && raw.taskCategory) || undefined),
-    queue,
+    queue: "ADMIN",
     agentId: typeof raw.agentId === "string" ? raw.agentId : undefined,
     address: typeof raw.address === "string" ? raw.address : undefined,
     inputs: {},
@@ -581,14 +581,23 @@ export async function fetchOperationsState(): Promise<OperationsData> {
     }
   }
 
-  const listings: Listing[] = (unwrap(listingsResRaw)?.listings ?? []).map((raw) => ({
-    id: raw.id,
-    address: raw.address,
-    status: toListingStatus(raw.status),
-    agentId: raw.assignee ?? raw.agent ?? agentsMap.get(CURRENT_OPERATIONS_USER_ID)?.id ?? "agent-noah",
-    dueDate: raw.dueDate ?? new Date().toISOString(),
-    dealType: raw.type,
-  }));
+  const listings: Listing[] = (unwrap(listingsResRaw)?.listings ?? []).map((raw) => {
+    const agentCandidate = parseAssignee(raw.assignee ?? raw.agent ?? raw.assignedTo);
+    const inferredAgentId = agentCandidate?.id ?? CURRENT_OPERATIONS_USER_ID;
+    const defaultAgentName = inferredAgentId === CURRENT_OPERATIONS_USER_ID ? "Noah Deskin" : inferredAgentId;
+    ensureAgent(agentsMap, agentCandidate ?? { id: inferredAgentId, name: defaultAgentName });
+    const agentName = agentCandidate?.name ?? agentsMap.get(inferredAgentId)?.name ?? defaultAgentName;
+
+    return {
+      id: raw.id,
+      address: raw.address,
+      status: toListingStatus(raw.status),
+      agentId: inferredAgentId,
+      agentName,
+      dueDate: raw.dueDate ?? new Date().toISOString(),
+      dealType: raw.type,
+    };
+  });
 
   const listingLookup = new Map<string, Listing>();
   listings.forEach((listing) => listingLookup.set(listing.id, listing));
@@ -606,6 +615,12 @@ export async function fetchOperationsState(): Promise<OperationsData> {
       ]);
 
       const detail = unwrap(detailRaw);
+      const agentFromDetail = parseAssignee(detail?.listing?.assignee ? { id: detail?.listing?.assignee, name: detail?.listing?.assigneeName ?? listing.agentName } : undefined);
+      if (agentFromDetail?.id && agentFromDetail?.name) {
+        listingLookup.set(listing.id, { ...listingLookup.get(listing.id)!, agentName: agentFromDetail.name });
+        ensureAgent(agentsMap, agentFromDetail);
+      }
+
       addNotes(notes, listing.id, detail?.notes);
       addHistory(history, listing.id, detail?.history);
 

@@ -37,12 +37,12 @@ export const QueueView = ({ onOpenTask }: { onOpenTask: (id: string) => void }) 
           <div className="divide-y">
             {sorted.map(t => {
               const listing = ops.listings.find(l => l.id === t.listingId);
-              const agent = listing && ops.agents.find(a => a.id === listing.agentId);
+              const agent = listing && (listing.agentName || ops.agents.find(a => a.id === listing.agentId)?.name);
               return (
                 <button key={t.id} className="py-3 w-full text-left flex items-center justify-between hover:bg-accent/40 rounded-md px-2" onClick={() => onOpenTask(t.id)}>
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{t.title}</div>
-                    <div className="text-xs text-muted-foreground truncate">{agent?.name} • {listing?.address} • Due {new Date(t.dueDate).toLocaleDateString()}</div>
+                    <div className="text-xs text-muted-foreground">{agent ? `Assigned to ${agent}` : "Unassigned"}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">SLA {t.urgencyScore}</span>
