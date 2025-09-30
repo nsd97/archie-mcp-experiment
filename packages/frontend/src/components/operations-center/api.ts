@@ -111,16 +111,27 @@ async function mutate(
   method = "POST",
   fallback?: { path: string; body?: unknown; method?: string }
 ): Promise<void> {
+  console.log('[FE][mutate] Attempting mutation:', { path, body, method });
+  
   const primaryResult = await safeFetch(path, {
     method,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  if (primaryResult === null && fallback) {
-    await safeFetch(fallback.path, {
-      method: fallback.method ?? method,
-      body: fallback.body !== undefined ? JSON.stringify(fallback.body) : undefined,
-    });
+  if (primaryResult === null) {
+    console.warn('[FE][mutate] Primary mutation failed, trying fallback:', fallback);
+    if (fallback) {
+      const fallbackResult = await safeFetch(fallback.path, {
+        method: fallback.method ?? method,
+        body: fallback.body !== undefined ? JSON.stringify(fallback.body) : undefined,
+      });
+      if (fallbackResult === null) {
+        console.error('[FE][mutate] Both primary and fallback mutations failed');
+        throw new Error('Mutation failed');
+      }
+    } else {
+      throw new Error('Primary mutation failed with no fallback');
+    }
   }
 }
 
@@ -275,6 +286,7 @@ type ListingSummary = {
   assignee?: unknown;
   dueDate?: string;
   status?: string;
+  type?: "SALE" | "LEASE";
   dealType?: string;
   propertyType?: string;
   squareFootage?: number;
@@ -315,8 +327,20 @@ type MyTasksResponse = ApiMaybeWrapped<{
   }>;
 }>;
 
+type BoardItem = {
+  id?: string;
+  address?: string;
+  agentId?: string;
+  status?: string;
+  dueDate?: string | null;
+  progress?: number;
+  completedDate?: string | null;
+  type?: "SALE" | "LEASE";
+  metadata?: Record<string, unknown>;
+};
+
 type BoardResponse = ApiMaybeWrapped<{
-  columns?: Record<string, Array<Record<string, unknown>>>;
+  columns?: Record<string, Array<BoardItem>>;
 }>;
 
 const parseAssignee = (raw: unknown): { id: string; name: string; email?: string } | undefined => {
@@ -557,23 +581,14 @@ export async function fetchOperationsState(): Promise<OperationsData> {
     }
   }
 
-  const listingsData = unwrap(listingsResRaw)?.listings ?? [];
-  const listings: Listing[] = listingsData.map((listing) => {
-    const assignee = parseAssignee(listing.assignee);
-    const agentId = ensureAgent(agentsMap, assignee);
-
-    return {
-      id: listing.id,
-      address: ensureTrailing(listing.address ?? listing.id ?? ""),
-      status: toListingStatus(listing.status),
-      agentId: agentId ?? CURRENT_OPERATIONS_USER_ID,
-      dueDate: toIsoDate(listing.dueDate ?? undefined),
-      dealType: listing.dealType ?? undefined,
-      propertyType: listing.propertyType ?? undefined,
-      squareFootage: listing.squareFootage ?? undefined,
-      location: listing.location ?? undefined,
-    } satisfies Listing;
-  });
+  const listings: Listing[] = (unwrap(listingsResRaw)?.listings ?? []).map((raw) => ({
+    id: raw.id,
+    address: raw.address,
+    status: toListingStatus(raw.status),
+    agentId: raw.assignee ?? raw.agent ?? agentsMap.get(CURRENT_OPERATIONS_USER_ID)?.id ?? "agent-noah",
+    dueDate: raw.dueDate ?? new Date().toISOString(),
+    dealType: raw.type,
+  }));
 
   const listingLookup = new Map<string, Listing>();
   listings.forEach((listing) => listingLookup.set(listing.id, listing));
@@ -632,31 +647,54 @@ export async function fetchOperationsState(): Promise<OperationsData> {
 
   const boardRes = unwrap(boardResRaw);
   const workItems: WorkItem[] = [];
-  const columnToType = (column: string): WorkItem["type"] => {
-    switch (column.toLowerCase()) {
-      case "new":
-        return "SALES_LISTING_ACTIVE";
-      case "inprogress":
-        return "SALE_LISTING_CLOSING";
-      case "completed":
-        return "SALE_LISTING_SOLD";
-      default:
-        return "SALES_LISTING_ACTIVE";
-    }
-  };
+  const listingTypeById = new Map<UUID, string>();
+  for (const listing of listings) {
+    listingTypeById.set(listing.id, (listing as any).dealType ?? (listing as any).type ?? "SALE");
+  }
 
   if (boardRes?.columns) {
     for (const [column, items] of Object.entries(boardRes.columns)) {
       for (const item of items ?? []) {
         const listingId = typeof item.id === "string" ? item.id : undefined;
         if (!listingId) continue;
+        const workItemType = (() => {
+          const metadataType = item.metadata?.workItemType;
+          if (typeof metadataType === "string") return metadataType as WorkItem["type"];
+          // Use type from board item first, then fall back to listing type
+          const itemType = item.type;
+          const listingType = (itemType || listingTypeById.get(listingId) || "SALE").toLowerCase();
+          const columnKey = column.toLowerCase();
+          if (listingType === "lease") {
+            switch (columnKey) {
+              case "new":
+                return "LEASE_LISTING_ACTIVE";
+              case "inprogress":
+                return "LEASE_LISTING_CLOSING";
+              case "completed":
+                return "LEASE_LISTING_LEASED";
+              default:
+                return "LEASE_LISTING_ACTIVE";
+            }
+          }
+          switch (columnKey) {
+            case "new":
+              return "SALES_LISTING_ACTIVE";
+            case "inprogress":
+              return "SALE_LISTING_CLOSING";
+            case "completed":
+              return "SALE_LISTING_SOLD";
+            default:
+              return "SALES_LISTING_ACTIVE";
+          }
+        })();
+
         workItems.push({
           id: `${column}-${listingId}`,
-          type: columnToType(column),
+          type: workItemType,
           title: typeof item.address === "string" ? item.address : listingLookup.get(listingId)?.address ?? listingId,
           listingId,
           taskIds: [],
-          metadata: {},
+          metadata: item.metadata ?? {},
         });
       }
     }

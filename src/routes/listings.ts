@@ -13,6 +13,7 @@ type ApiListing = {
   dueDate?: string | null;
   status: Status;
   progress?: number | null;
+  type?: "SALE" | "LEASE";
   createdAt: string;
   updatedAt: string;
 };
@@ -40,6 +41,7 @@ const listingsResponseSchema = z.object({
       dueDate: z.string().nullable(),
       status: z.string(),
       progress: z.number().nullable(),
+      type: z.enum(["SALE", "LEASE"]).optional(),
       createdAt: z.string(),
       updatedAt: z.string(),
     })
@@ -56,19 +58,21 @@ const listingResponseSchema = z.object({
   dueDate: z.string().nullable(),
   status: z.string(),
   progress: z.number().nullable(),
+  type: z.enum(["SALE", "LEASE"]).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
 const listingDetailsResponseSchema = z.object({
-  listing: z.object({
-    id: z.string(),
-    address: z.string(),
-    assignee: z.string().nullable(),
-    dueDate: z.string().nullable(),
-    status: z.string(),
-    progress: z.number().nullable(),
-  }),
+    listing: z.object({
+      id: z.string(),
+      address: z.string(),
+      assignee: z.string().nullable(),
+      dueDate: z.string().nullable(),
+      status: z.string(),
+      progress: z.number().nullable(),
+      type: z.enum(["SALE", "LEASE"]).optional(),
+    }),
   details: z.object({
     propertyType: z.string().nullable(),
     bedrooms: z.number(),
@@ -108,6 +112,7 @@ function toApiListing(l: Listing): ApiListing {
       if (p && typeof p === 'object' && typeof p.pct === 'number') return p.pct;
       return null;
     })(),
+    type: l.type,
     createdAt: l.created_at,
     updatedAt: l.updated_at,
   };
@@ -150,6 +155,7 @@ export default async function listingsRoutes(app: FastifyInstance) {
           dueDate: api.dueDate,
           status: api.status,
           progress: api.progress,
+          type: api.type,
           createdAt: api.createdAt,
           updatedAt: api.updatedAt,
         };
@@ -245,6 +251,7 @@ export default async function listingsRoutes(app: FastifyInstance) {
           assignee: l.assignee ?? null,
           dueDate: l.due_date ?? null,
           status: l.status,
+          type: l.type,
           progress: (() => {
             const p = (l as any).progress;
             if (typeof p === 'number') return p;

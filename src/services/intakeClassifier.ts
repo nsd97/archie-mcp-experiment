@@ -1,6 +1,7 @@
 import { MessageAttributeValue, SendMessageCommand, SendMessageCommandInput } from '@aws-sdk/client-sqs';
 import sqs from '../db/sqsClient';
 import { captureAsync } from './xray';
+import type { MessageType, ClassificationV1 } from './llmClassifier';
 
 type SlackEventPayload = Record<string, any> | undefined;
 
@@ -40,6 +41,14 @@ export type NormalizedIntake = {
   ts?: string;
   trace_id?: string;
   raw: unknown;
+  message_type: MessageType;
+  task_key: ClassificationV1['task_key'];
+  group_key: ClassificationV1['group_key'];
+  listing: ClassificationV1['listing'];
+  assignee_hint: ClassificationV1['assignee_hint'];
+  due_date: ClassificationV1['due_date'];
+  confidence: ClassificationV1['confidence'];
+  explanations: ClassificationV1['explanations'];
 };
 
 export async function enqueueIntakeEvent(event: NormalizedIntake): Promise<void> {
@@ -52,7 +61,14 @@ export async function enqueueIntakeEvent(event: NormalizedIntake): Promise<void>
     const attributes: Record<string, MessageAttributeValue> = {
       'x-trace-id': { DataType: 'String', StringValue: event.trace_id },
     };
+    if (event.message_type) {
+      attributes['message_type'] = { DataType: 'String', StringValue: event.message_type };
+    }
     input.MessageAttributes = attributes;
+  } else if (event.message_type) {
+    input.MessageAttributes = {
+      message_type: { DataType: 'String', StringValue: event.message_type },
+    };
   }
 
   await captureAsync('enqueueIntakeEvent', async () => {
@@ -132,6 +148,8 @@ export function normalizeSlackEvent(body: unknown): NormalizedIntake | null {
     payload?.event_id ||
     undefined;
 
+  const classification = fallbackClassify(text);
+
   return {
     schema_version: 1,
     source: 'slack',
@@ -143,5 +161,154 @@ export function normalizeSlackEvent(body: unknown): NormalizedIntake | null {
     ts,
     trace_id: traceId,
     raw: body,
+    ...classification,
   };
+}
+
+function fallbackClassify(text: string | undefined): Pick<
+  NormalizedIntake,
+  'message_type' | 'task_key' | 'group_key' | 'listing' | 'assignee_hint' | 'due_date' | 'confidence' | 'explanations'
+> {
+  if (!text || !text.trim()) {
+    return {
+      message_type: 'INFO_REQUEST',
+      task_key: null,
+      group_key: null,
+      listing: { type: null, address: null },
+      assignee_hint: null,
+      due_date: null,
+      confidence: 0.4,
+      explanations: ['Message was empty or missing text'],
+    };
+  }
+
+  const lower = text.toLowerCase();
+  const explanations: string[] = [];
+
+  const looksLikeListing = /(new\s+)?(lease|sale)\s+listing/.test(lower) || lower.includes('listing at ');
+  const listingType: 'LEASE' | 'SALE' | null = lower.includes('lease')
+    ? 'LEASE'
+    : lower.includes('sale') || lower.includes('sell') || lower.includes('buyer sale')
+    ? 'SALE'
+    : null;
+
+  const groupKey = (() => {
+    if (lower.includes('buyer lease')) return 'LEASE_LISTING' as const;
+    if (lower.includes('buyer sale')) return 'SALE_LISTING' as const;
+    if (listingType === 'LEASE') return 'LEASE_LISTING' as const;
+    if (listingType === 'SALE') return 'SALE_LISTING' as const;
+    return null;
+  })();
+
+  const address = extractAddress(text);
+  if (looksLikeListing && !address) {
+    explanations.push('Could not extract address from message');
+  }
+
+  const dueDate = extractDueDate(text);
+  if (!dueDate && /\bby\b|\bdue\b/.test(lower)) {
+    explanations.push('Due date mentioned but not understood');
+  }
+
+  if (looksLikeListing) {
+    return {
+      message_type: 'GROUP',
+      task_key: null,
+      group_key: groupKey,
+      listing: { type: listingType, address },
+      assignee_hint: extractAssignee(text),
+      due_date: dueDate,
+      confidence: address ? 0.75 : 0.6,
+      explanations: explanations.length ? explanations : null,
+    };
+  }
+
+  if (lower.includes('task') || lower.startsWith('do ') || lower.includes('please')) {
+    explanations.push('Could not map message to a known task key');
+    return {
+      message_type: 'INFO_REQUEST',
+      task_key: null,
+      group_key: null,
+      listing: { type: null, address: null },
+      assignee_hint: extractAssignee(text),
+      due_date: dueDate,
+      confidence: 0.5,
+      explanations,
+    };
+  }
+
+  return {
+    message_type: 'IGNORE',
+    task_key: null,
+    group_key: null,
+    listing: { type: null, address: null },
+    assignee_hint: null,
+    due_date: null,
+    confidence: 0.6,
+    explanations: ['Content not recognized as operational'],
+  };
+}
+
+function extractAddress(text: string): string | null {
+  if (!text) return null;
+
+  const patterns: RegExp[] = [
+    /\bat\s+([^\n]+?)(?:\s+(?:need|by|due|please|thanks)\b|[.,!?]|$)/i,
+    /\bfor\s+([^\n]+?)(?:\s+(?:need|by|due|please|thanks)\b|[.,!?]|$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (match && match[1]) {
+      const cleaned = sanitizeAddressSegment(match[1]);
+      if (cleaned) return cleaned;
+    }
+  }
+
+  return null;
+}
+
+function sanitizeAddressSegment(segment: string): string | null {
+  if (!segment) return null;
+  let cleaned = segment.trim();
+
+  cleaned = cleaned.replace(/^(?:the\s+|a\s+|an\s+)/i, '');
+  cleaned = cleaned.replace(/[.,!?]+$/, '');
+  cleaned = cleaned.replace(/\s+(?:need|by|due|please|thanks)\b.*/i, '');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  return cleaned.length ? cleaned : null;
+}
+
+function extractDueDate(text: string): string | null {
+  const monthRegex = /(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:,?\s*(\d{4}))?/i;
+  const match = text.match(monthRegex);
+  if (!match) return null;
+  const [, monthName, dayStr, yearStr] = match;
+  if (!yearStr) return null;
+  const monthMap: Record<string, string> = {
+    january: '01',
+    february: '02',
+    march: '03',
+    april: '04',
+    may: '05',
+    june: '06',
+    july: '07',
+    august: '08',
+    september: '09',
+    october: '10',
+    november: '11',
+    december: '12',
+  };
+  const month = monthMap[monthName.toLowerCase()];
+  if (!month) return null;
+  const day = dayStr.padStart(2, '0');
+  return `${yearStr}-${month}-${day}`;
+}
+
+function extractAssignee(text: string): string | null {
+  const mentionMatch = text.match(/<@([A-Z0-9]+)>/i);
+  if (mentionMatch) return mentionMatch[1];
+  const byName = text.match(/assign(?: to)?\s+([A-Za-z.\- ]+)/i);
+  return byName ? byName[1].trim() : null;
 }

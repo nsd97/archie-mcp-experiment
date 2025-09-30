@@ -259,7 +259,8 @@ export let callLLM = async (
   if (fewShot && fewShot.length) messages.push(...fewShot);
   messages.push({ role: 'user', content: userPrompt });
 
-  const model = process.env.OPENAI_MODEL || 'gpt-5';
+  const model = (process.env.OPENAI_MODEL || '').trim();
+  if (!model) throw new Error('OPENAI_MODEL missing');
   const maxRetries = Number(process.env.LLM_MAX_RETRIES || '2');
   const useStream = (process.env.LLM_STREAM || 'false').toLowerCase() === 'true';
 
@@ -272,7 +273,6 @@ export let callLLM = async (
         const stream = await client.chat.completions.create({
           model,
           messages,
-          temperature: 0,
           response_format: jsonSchema
             ? { type: 'json_schema', json_schema: { name: 'RealEstateOpsClassification', schema: jsonSchema, strict: true } as any }
             : { type: 'json_object' },
@@ -302,7 +302,6 @@ export let callLLM = async (
       const resp = await client.chat.completions.create({
         model,
         messages,
-        temperature: 0,
         response_format: jsonSchema
           ? { type: 'json_schema', json_schema: { name: 'RealEstateOpsClassification', schema: jsonSchema, strict: true } as any }
           : { type: 'json_object' },

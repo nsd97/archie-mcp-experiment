@@ -11,15 +11,40 @@
                Otherwise, it will just run the prompt and print the parsed JSON.
 */
 
-import 'dotenv/config';
+import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
 import { RTMClient } from '@slack/rtm-api';
 import { App } from '@slack/bolt';
 import { classifyAndEnqueueFromSlackEvent, buildPrompt, callLLM, ClassificationV1Schema } from '../src/services/llmClassifier';
 
-const token = process.env.SLACK_BOT_TOKEN || '';
-const appToken = process.env.SLACK_APP_LEVEL_TOKEN || '';
+// Load environment from common local files if not already present
+(() => {
+  const root = process.cwd();
+  const candidates = [
+    '.env.local',
+    '.env',
+    'ENV_LOCAL.txt',
+    'ENV_LOCAL_EXAMPLE.txt',
+  ];
+  for (const rel of candidates) {
+    const p = path.join(root, rel);
+    if (fs.existsSync(p)) {
+      dotenv.config({ path: p, override: false });
+    }
+  }
+})();
+
+const token =
+  process.env.SLACK_BOT_TOKEN ||
+  process.env.SLACK_TOKEN ||
+  process.env.SLACK_BOT_USER_OAUTH_TOKEN ||
+  process.env.BOT_TOKEN ||
+  process.env.SLACK_OAUTH_TOKEN ||
+  '';
+const appToken = process.env.SLACK_APP_LEVEL_TOKEN || process.env.SLACK_APP_TOKEN || '';
 if (!token) {
-  console.error('[SLACK] SLACK_BOT_TOKEN missing');
+  console.error('[SLACK] SLACK_BOT_TOKEN missing (looked for SLACK_BOT_TOKEN/SLACK_TOKEN/SLACK_BOT_USER_OAUTH_TOKEN)');
   process.exit(1);
 }
 

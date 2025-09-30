@@ -10,6 +10,7 @@ const boardItemSchema = z.object({
   dueDate: z.string().nullable().optional(),
   progress: z.number().optional(),
   completedDate: z.string().nullable().optional(),
+  type: z.enum(["SALE", "LEASE"]).optional(),
 });
 
 const boardResponseSchema = z.object({
@@ -43,7 +44,7 @@ export default async function boardRoutes(app: FastifyInstance) {
     validation: { response: { 200: boardResponseSchema } },
     async handler() {
       const listings = await queryListingsByCreatedAt('', 1000);
-      const columns: Record<string, Array<{ id: string; address?: string; agentId?: string; status?: string; dueDate?: string | null; progress?: number; completedDate?: string | null }>> = {
+      const columns: Record<string, Array<{ id: string; address?: string; agentId?: string; status?: string; dueDate?: string | null; progress?: number; completedDate?: string | null; type?: "SALE" | "LEASE" }>> = {
         new: [],
         inProgress: [],
         completed: [],
@@ -71,6 +72,7 @@ export default async function boardRoutes(app: FastifyInstance) {
           dueDate: listing.due_date ?? null,
           progress: bucket === 'inProgress' ? progressValue ?? 0 : undefined,
           completedDate: bucket === 'completed' ? listing.completed_at ?? listing.updated_at ?? null : undefined,
+          type: listing.type,
         });
       }
 

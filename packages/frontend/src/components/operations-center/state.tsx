@@ -51,11 +51,15 @@ export const OperationsProvider = ({ children }: { children: React.ReactNode }) 
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const run = useCallback((operation: () => Promise<OperationsData>) => {
+    console.log('[OperationsProvider] Starting operation...');
     setIsLoading(true);
     operation()
-      .then(setData)
+      .then((newData) => {
+        console.log('[OperationsProvider] Operation succeeded, updating data');
+        setData(newData);
+      })
       .catch((error) => {
-        console.error("OperationsProvider action failed", error);
+        console.error("[OperationsProvider] action failed", error);
       })
       .finally(() => {
         setIsLoading(false);

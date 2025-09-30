@@ -16,14 +16,13 @@ export type MappedTask = {
 export function expandGroupKeyToTasks(groupKey: string): MappedTask[] {
   switch (groupKey) {
     case "SALE_LISTING":
-      // Minimal safe starter set; add more as definitions land.
       return [
         { defId: "SALE::BOOK_PHOTOS", title: "Book Photos" },
+        { title: "Prepare Sale Listing" },
       ];
     case "LEASE_LISTING":
-      // Placeholder: if you have LEASE definitions, map them here.
       return [
-        { title: "Prepare Lease Listing" },
+        { defId: "LEASE::PREP_LISTING", title: "Prepare Lease Listing" },
       ];
     default:
       return [];

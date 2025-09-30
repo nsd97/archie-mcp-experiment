@@ -79,6 +79,7 @@ const listTasksResponseSchema = z.object({
       name: z.string(),
       status: z.string(),
       priority: z.string(),
+      assignedTo: z.object({ userId: z.string() }).nullable(),
     })
   ),
   pagination: z.object({
@@ -143,6 +144,7 @@ export default async function tasksRoutes(app: FastifyInstance) {
         name: t.name,
         status: t.status,
         priority: toPriorityLabel(t.priority),
+        assignedTo: t.assigned_to ? { userId: t.assigned_to.userId } : null,
       }));
 
       return {

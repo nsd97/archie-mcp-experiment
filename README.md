@@ -38,6 +38,21 @@ npm run seed
 npm run dev
 ```
 
+### Exposing the local server to Slack (ngrok)
+
+Slack needs a publicly reachable URL to deliver Events API callbacks. During local development you can tunnel your Fastify server with [ngrok](https://ngrok.com/):
+
+```bash
+# install and authenticate once
+brew install ngrok
+ngrok config add-authtoken <YOUR_NGROK_TOKEN>
+
+# in a separate terminal while `npm run dev` is running on port 3000
+ngrok http 3000
+```
+
+ngrok prints an HTTPS forwarding URL such as `https://abc123.ngrok.app`. Set your Slack app’s **Event Subscriptions → Request URL** to `https://abc123.ngrok.app/slack/events` (update it whenever the ngrok URL changes). Leave the tunnel running while testing so Slack can reach your local backend.
+
 1) Run tests
 
 ```bash

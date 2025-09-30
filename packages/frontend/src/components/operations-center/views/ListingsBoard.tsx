@@ -118,8 +118,21 @@ export const ListingsBoard = ({ ops, onOpenListing, onlyListingIds, taskFilter }
     const taskIdSet = tasks.length ? new Set(tasks.map(t => t.id)) : undefined;
     const workItem = (taskIdSet ? workItemsForListing.find(w => w.taskIds.some(id => taskIdSet.has(id))) : undefined)
       || workItemsForListing[0];
-    const completeness = getListingCompleteness(ops, l.id);
     const catClass = typeToClass(workItem?.type);
+    const categoryLabel = (() => {
+      switch (workItem?.type) {
+        case "LEASE_LISTING_ACTIVE":
+        case "LEASE_LISTING_CLOSING":
+        case "LEASE_LISTING_LEASED":
+          return "Lease Listing";
+        case "SALES_LISTING_ACTIVE":
+        case "SALE_LISTING_CLOSING":
+        case "SALE_LISTING_SOLD":
+          return "Sales Listing";
+        default:
+          return undefined;
+      }
+    })();
 
     // Time-to-due progress (0 until 7 days out, then ramps to 100% at due)
     const duePct = Math.round(dueProximity(l.dueDate, 7) * 100);
@@ -144,6 +157,7 @@ export const ListingsBoard = ({ ops, onOpenListing, onlyListingIds, taskFilter }
             <span>{l.address}</span>
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-2">
+            {categoryLabel && <span>{categoryLabel} Active</span>}
             <span>{agent?.name} • Due {new Date(l.dueDate).toLocaleDateString()}</span>
           </div>
         </div>

@@ -76,8 +76,6 @@ export default async function myTasksRoutes(app: FastifyInstance) {
           taskCount: tasksForListing.length,
           tasks: tasksForListing,
         });
-          tasks: tasksForListing,
-        });
       }
 
       const totalTasks = listings.reduce((acc, listing) => acc + (listing.tasks?.length ?? 0), 0);

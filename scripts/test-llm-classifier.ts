@@ -24,6 +24,7 @@ async function main() {
   const ts = String(Date.now());
 
   console.log('[TEST] Starting LLM classification test');
+  console.log('[TEST] Using model from env:', process.env.OPENAI_MODEL || '(missing)');
   console.log('[TEST] Message:', message);
 
   try {
