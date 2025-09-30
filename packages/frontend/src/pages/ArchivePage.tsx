@@ -15,8 +15,24 @@ const ArchiveInner = () => {
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
   const archivedListings = useMemo(
-    () => ops.listings.filter(l => l.status === "DONE_POSTED" && (now - new Date(l.dueDate).getTime()) > sevenDaysMs),
-    [ops.listings]
+    () => {
+      // Use the latest DONE event timestamp per listing as the anchor for age
+      const doneAtByListingId = new Map<string, number>();
+      for (const evt of ops.history) {
+        if (evt.type === "DONE") {
+          const ts = new Date(evt.timestamp).getTime();
+          const prev = doneAtByListingId.get(evt.listingId) ?? Number.NEGATIVE_INFINITY;
+          if (ts > prev) doneAtByListingId.set(evt.listingId, ts);
+        }
+      }
+
+      return ops.listings.filter(l => {
+        if (l.status !== "DONE_POSTED") return false;
+        const anchor = doneAtByListingId.get(l.id) ?? new Date(l.dueDate).getTime();
+        return (now - anchor) > sevenDaysMs;
+      });
+    },
+    [ops.listings, ops.history, now]
   );
 
   const strayAdmin = useMemo(
