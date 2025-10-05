@@ -1,0 +1,3 @@
+[submodule "external/openai-agents-python"]
+	path = external/openai-agents-python
+	url = https://github.com/openai/openai-agents-python.git
