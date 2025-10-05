@@ -1,3 +1,4 @@
 [submodule "external/openai-agents-python"]
 	path = external/openai-agents-python
-	url = https://github.com/openai/openai-agents-python.git
+	url = https://github.com/nsd97/openai-agents-python.git
+	branch = noahs-agentic-version
