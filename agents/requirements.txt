@@ -1,0 +1,24 @@
+# Core dependencies
+python-dotenv==1.0.0
+uvicorn==0.30.6
+fastapi==0.115.0
+pydantic==2.9.2
+httpx==0.27.2
+
+# AWS SDK
+boto3==1.35.30
+aioboto3==13.1.1
+
+# Matrix integration (for P3)
+matrix-nio==0.25.2
+
+# Monitoring
+prometheus-client==0.21.0
+
+# Development
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
+
+# The OpenAI Agents SDK is vendored at /external/openai-agents-python/
+# We'll add it to PYTHONPATH instead of installing

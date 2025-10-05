@@ -22,6 +22,9 @@ import authPlugin from './plugins/auth';
 import debugUser from './plugins/debugUser';
 import authRoutes from './routes/auth';
 import boardRoutes from './routes/board';
+import apiVersionPlugin from './plugins/apiVersion';
+import v2TasksRoutes from './routes/v2/tasks';
+import v2AgentRoutes from './routes/v2/agent';
 
 dotenv.config();
 
@@ -82,11 +85,14 @@ export function createApp(options: AppOptions = {}) {
   app.register(compress, { global: true });
   app.register(validationPlugin);
   app.register(metricsPlugin);
+  app.register(apiVersionPlugin); // API version negotiation
   app.register(authPlugin);
   app.register(debugUser);
   app.register(debugRoutes);
   app.register(openapiRoute);
   app.register(docsRoute);
+  
+  // V1 routes (existing)
   app.register(listingsRoutes);
   app.register(queueRoutes);
   app.register(boardRoutes);
@@ -97,6 +103,10 @@ export function createApp(options: AppOptions = {}) {
   app.register(slackRoutes);
   app.register(entitiesRoutes);
   app.register(authRoutes);
+  
+  // V2 routes (with agent support)
+  app.register(v2TasksRoutes);
+  app.register(v2AgentRoutes);
 
   // Simple rate limit for write methods
   app.register(simpleRateLimit);

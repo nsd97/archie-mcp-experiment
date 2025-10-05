@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # Simplified Matrix Synapse that actually works
+  matrix-synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: archieos-matrix-synapse
+    ports:
+      - "8008:8008"
+      - "8448:8448"
+    volumes:
+      - ./matrix/data:/data
+    environment:
+      - SYNAPSE_SERVER_NAME=localhost
+      - SYNAPSE_REPORT_STATS=no
+      - SYNAPSE_NO_TLS=1
+      - SYNAPSE_ENABLE_REGISTRATION=1
+      - UID=1000
+      - GID=1000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/_matrix/client/versions"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+

@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  agent-service:
+    build: 
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: archieos-agent-service
+    volumes:
+      - ./agents:/app
+      - ./external/openai-agents-python:/app/external/openai-agents-python:ro
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=local
+      - LOG_LEVEL=debug
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - BACKEND_URL=http://backend:3000
+      - AGENT_SERVICE_PORT=8000
+      - TRACE_ENABLED=true
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=60
+      # Matrix config (for P3)
+      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
+      - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
+      - MATRIX_APP_SERVICE_TOKEN=${MATRIX_APP_SERVICE_TOKEN}
+      # SQS config (for P3)
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/prompt-queue
+      - SQS_DLQ_URL=http://localstack:4566/000000000000/prompt-queue-dlq
+    depends_on:
+      - localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: >
+      sh -c "
+        echo 'Installing dependencies...' &&
+        pip install -r requirements.txt &&
+        echo 'Starting agent service...' &&
+        python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # Matrix Synapse server
+  matrix-synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: archieos-matrix-synapse
+    environment:
+      - SYNAPSE_SERVER_NAME=localhost
+      - SYNAPSE_REPORT_STATS=no
+      - SYNAPSE_ENABLE_REGISTRATION=yes
+      - SYNAPSE_NO_TLS=yes
+    volumes:
+      - ./matrix/data:/data
+      - ./matrix/homeserver.yaml:/data/homeserver.yaml:ro
+    ports:
+      - "8008:8008"
+      - "8448:8448"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/_matrix/client/versions"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: >
+      sh -c "
+        if [ ! -f /data/homeserver.yaml ]; then
+          echo 'Generating Synapse config...' &&
+          python -m synapse.app.homeserver \
+            --server-name localhost \
+            --config-path /data/homeserver.yaml \
+            --generate-config \
+            --report-stats=no &&
+          sed -i 's/enable_registration: false/enable_registration: true/g' /data/homeserver.yaml
+        fi &&
+        exec python -m synapse.app.homeserver -c /data/homeserver.yaml
+      "
+
+  # Queue consumer service (Prompt Queue → Archie)
+  queue-consumer:
+    build: 
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: archieos-queue-consumer
+    volumes:
+      - ./agents:/app
+      - ./external/openai-agents-python:/app/external/openai-agents-python:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - BACKEND_URL=http://backend:3000
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/prompt-queue
+      - SQS_DLQ_URL=http://localstack:4566/000000000000/prompt-queue-dlq
+      - LAUREN_WORK_QUEUE_URL=http://localstack:4566/000000000000/lauren-work-queue
+      - MATRIX_EVENTS_TABLE=matrix_events
+      - PROCESSED_EVENTS_TABLE=processed_events
+    depends_on:
+      - localstack
+      - agent-service
+    command: >
+      sh -c "
+        echo 'Waiting for infrastructure...' &&
+        sleep 20 &&
+        echo 'Starting Archie (Prompt Queue consumer)...' &&
+        python -m src.queue_consumer
+      "
+
+  # Lauren Work Queue consumer (Archie → Lauren)
+  lauren-consumer:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: archieos-lauren-consumer
+    volumes:
+      - ./agents:/app
+      - ./external/openai-agents-python:/app/external/openai-agents-python:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - BACKEND_URL=http://backend:3000
+      - LAUREN_WORK_QUEUE_URL=http://localstack:4566/000000000000/lauren-work-queue
+      - LAUREN_WORK_QUEUE_DLQ_URL=http://localstack:4566/000000000000/lauren-work-queue-dlq
+      - ARCHIE_SIGNAL_QUEUE_URL=http://localstack:4566/000000000000/archie-signal-queue
+      - PROCESSED_EVENTS_TABLE=processed_events
+    depends_on:
+      - localstack
+      - agent-service
+    command: >
+      sh -c "
+        echo 'Waiting for infrastructure...' &&
+        sleep 25 &&
+        echo 'Starting Lauren (Work Queue consumer)...' &&
+        python -m src.lauren_consumer
+      "
+
+  # Archie Signal Queue consumer (Lauren → Archie)
+  archie-signal-consumer:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: archieos-archie-signal-consumer
+    volumes:
+      - ./agents:/app
+      - ./external/openai-agents-python:/app/external/openai-agents-python:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - BACKEND_URL=http://backend:3000
+      - ARCHIE_SIGNAL_QUEUE_URL=http://localstack:4566/000000000000/archie-signal-queue
+      - ARCHIE_SIGNAL_QUEUE_DLQ_URL=http://localstack:4566/000000000000/archie-signal-queue-dlq
+      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
+      - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
+      - PROCESSED_EVENTS_TABLE=processed_events
+    depends_on:
+      - localstack
+      - agent-service
+      - matrix-synapse
+    command: >
+      sh -c "
+        echo 'Waiting for infrastructure...' &&
+        sleep 30 &&
+        echo 'Starting Archie Signal consumer...' &&
+        python -m src.archie_signal_consumer
+      "
+
+# Networks will be auto-created by docker-compose

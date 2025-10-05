@@ -1,0 +1,222 @@
+================================================================================
+  ArchieOS TWO-AGENT SYSTEM — IMPLEMENTATION COMPLETE
+================================================================================
+
+Date: October 5, 2025
+Branch: Noahs-agentic-experiment
+Status: ✅ COMPLETE — READY FOR TESTING
+
+================================================================================
+  WHAT WAS BUILT
+================================================================================
+
+✅ P0 — SDK Integration Spine
+   • Python agent service with Archie and Lauren agents
+   • FastAPI health/metrics server
+   • Docker Compose integration
+   • OpenAI tracing enabled
+
+✅ P1 — Archie DB-Read Tool
+   • get_task_status with filters, pagination, summaries
+   • Backend REST API integration
+   • Unit tests with mocked responses
+
+✅ P2 — Lauren Classify+Create (REVISED)
+   • classify_and_create_task with legacy rules
+   • Tasks always OPEN/UNCLAIMED (humans claim via UI)
+   • Lauren Work Queue for async processing
+   • Archie Signal Queue for completion notifications
+   • enqueue_for_lauren tool (Archie → Lauren)
+   • notify_archie_signal tool (Lauren → Archie)
+   • REMOVED: claim/complete tools (humans do this)
+
+✅ P3 — Matrix Integration  
+   • Matrix adapter with shared DynamoDB
+   • Prompt Queue (Matrix → Archie)
+   • send_matrix_message with threading
+   • Matrix Synapse container
+   • Idempotency and deduplication
+
+✅ P4 — API v2
+   • V2 routes with provenance fields
+   • Agent metadata support
+   • Version negotiation
+   • Backward compatibility maintained
+
+✅ P5 — Observability & Guardrails
+   • SDK-based input/output guardrails
+   • Lifecycle hooks (AgentHooks, RunHooks)
+   • Prometheus metrics
+   • Token usage tracking
+
+================================================================================
+  ARCHITECTURE
+================================================================================
+
+Three Queues (SQS + LocalStack):
+
+  ① Prompt Queue ────────────→ Archie Consumer
+                              (queue_consumer.py)
+                                      │
+                   ┌──────────────────┴──────────────────┐
+                   │                                      │
+             Status Query                          Admin Task
+                   │                                      │
+                   ▼                                      ▼
+           get_task_status                    enqueue_for_lauren
+                   │                                      │
+                   ▼                                      ▼
+           send_matrix_message            ② Lauren Work Queue
+                                                          │
+                                                          ▼
+                                                  Lauren Consumer
+                                                (lauren_consumer.py)
+                                                          │
+                                                          ▼
+                                             classify_and_create_task
+                                                          │
+                                                          ▼
+                                                  DynamoDB (OPEN/UNCLAIMED task)
+                                                          │
+                                                          ▼
+                                                notify_archie_signal
+                                                          │
+                                                          ▼
+                                            ③ Archie Signal Queue
+                                                          │
+                                                          ▼
+                                              Archie Signal Consumer
+                                            (archie_signal_consumer.py)
+                                                          │
+                                                          ▼
+                                                send_matrix_message
+                                                          │
+                                                          ▼
+                                                  Matrix/Element
+                                                   (User notified)
+
+================================================================================
+  AGENT TOOLS (FINAL)
+================================================================================
+
+ARCHIE (3 tools):
+  1. get_task_status — Query tasks with filters
+  2. send_matrix_message — Reply in Matrix/Element
+  3. enqueue_for_lauren — Queue admin task (async, non-blocking)
+
+LAUREN (3 tools):
+  1. classify_and_create_task — Full classification + creation
+  2. create_task — Direct creation helper
+  3. notify_archie_signal — Send signal to Archie
+
+LAUREN DOES NOT HAVE (by design):
+  ✗ claim_task — Humans do this via UI
+  ✗ complete_task — Humans do this via UI
+  ✗ update_task — Out of scope
+  ✗ cancel_task — Out of scope
+
+================================================================================
+  DOCKER SERVICES
+================================================================================
+
+1. localstack (port 4566) — Mock AWS (SQS, DynamoDB, S3)
+2. backend (port 3000) — Node.js REST API
+3. agent-service (port 8000) — FastAPI health/metrics
+4. matrix-synapse (port 8008) — Matrix homeserver
+5. queue-consumer — Archie (Prompt Queue → Archie)
+6. lauren-consumer — Lauren (Lauren Work Queue → Lauren)
+7. archie-signal-consumer — Archie (Archie Signal Queue → Archie)
+
+================================================================================
+  SDK PATTERNS USED
+================================================================================
+
+✓ Agent Definition: Agent(name, instructions, tools, model)
+✓ Function Tools: @function_tool decorator with async support
+✓ Runner.run: SDK agent execution with context injection
+✓ Lifecycle Hooks: AgentHooks & RunHooks for observability
+✓ Guardrails: @input_guardrail & @output_guardrail with tripwires
+✓ Context: RunContextWrapper[AgentContext] for dependency injection
+✓ Tracing: Automatic OpenAI platform traces
+✓ Multi-Agent: Code-based orchestration via queues
+
+All patterns from: /external/openai-agents-python/
+
+================================================================================
+  QUICK START
+================================================================================
+
+1. export OPENAI_API_KEY=sk-...
+
+2. cd agents && python scripts/init_matrix_infra.py && cd ..
+
+3. docker-compose -f docker-compose.yml -f docker-compose.agents.yml up
+
+4. curl -X POST http://localhost:8008/_matrix/client/r0/register \
+     -d '{"username":"archie","password":"archie","auth":{"type":"m.login.dummy"}}'
+
+5. cd agents && MATRIX_ACCESS_TOKEN=<token> python scripts/matrix_listener.py
+
+6. Open Element → Connect to localhost:8008 → Invite @archie:localhost
+
+7. Chat: "Book photos for 123 Main St"
+
+8. See task appear in frontend UI (http://localhost:5173)
+
+================================================================================
+  DEPLOYMENT STATUS
+================================================================================
+
+LOCAL: ✅ COMPLETE — Fully functional on Docker + LocalStack
+AWS:   📋 READY — Code is AWS-compatible, not deployed yet
+
+To deploy to AWS:
+- Change DYNAMODB_ENDPOINT and SQS_ENDPOINT to empty (use real AWS)
+- Deploy consumers as Lambda functions
+- Deploy agent-service as ECS tasks
+- Configure production Matrix homeserver
+- Apply IAM roles and CloudWatch alarms
+
+================================================================================
+  NEXT STEPS
+================================================================================
+
+FOR TESTING:
+  → See QUICKSTART.md for step-by-step setup
+  → Try example interactions in Element
+  → Verify tasks appear in UI as OPEN/UNCLAIMED
+  → Claim and complete tasks via UI
+  → Monitor metrics and traces
+
+FOR AWS DEPLOYMENT (when ready):
+  → See FINAL_IMPLEMENTATION.md section "P6 - AWS Deployment"
+  → Update environment variables
+  → Deploy Lambda + ECS configurations
+  → Configure production Matrix
+
+FOR ENHANCEMENTS:
+  → Improve classification with LLM instead of keywords
+  → Add session persistence for multi-turn conversations
+  → Implement distributed rate limiting with Redis
+  → Add more task types and catalog definitions
+
+================================================================================
+  DOCUMENTATION
+================================================================================
+
+📄 QUICKSTART.md — Get running in 10 minutes
+📄 FINAL_IMPLEMENTATION.md — Complete architecture and flows
+📄 IMPLEMENTATION_COMPLETE.md — Summary with SDK references
+📄 agents/README.md — Agent service documentation
+📄 plan.md — Approved implementation plan
+
+================================================================================
+
+Built with the OpenAI Agents SDK (vendored at /external/openai-agents-python/)
+All patterns follow official SDK documentation and examples.
+
+Status: COMPLETE ✅
+Ready for: TESTING 🧪
+Deployable to: AWS (when needed) ☁️
+
+================================================================================
