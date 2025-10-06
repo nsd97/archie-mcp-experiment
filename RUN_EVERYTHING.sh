@@ -2,7 +2,8 @@
 # Complete startup script for ArchieOS Two-Agent System
 set -e
 
-PROJECT_ROOT="/Users/noahdeskin/ArchieOS Backend.worktrees/Noahs-agetnic-experiment"
+# Detect project root (assumes script is at project root)
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "🚀 Starting ArchieOS Two-Agent System..."
@@ -11,14 +12,26 @@ echo "===================================================================="
 # Step 1: Start LocalStack
 echo ""
 echo "1️⃣  Starting LocalStack (AWS simulator)..."
+# Check dependencies
+command -v docker-compose >/dev/null 2>&1 || { echo "❌ docker-compose is required but not installed."; exit 1; }
+command -v curl >/dev/null 2>&1   || { echo "❌ curl is required but not installed."; exit 1; }
+
+echo ""
+echo "1️⃣  Starting LocalStack (AWS simulator)..."
 docker-compose -f docker-compose.yml up -d localstack
 
-echo "   Waiting for LocalStack to be ready (30s)..."
-sleep 30
-
-# Verify LocalStack
-echo "   Checking LocalStack health..."
-curl -s http://localhost:4566/_localstack/health | grep -q "running" && echo "   ✅ LocalStack is healthy" || echo "   ⚠️  LocalStack may not be ready"
+echo "   Waiting for LocalStack to be ready..."
+MAX_ATTEMPTS=30
+ATTEMPT=0
+until curl -s http://localhost:4566/_localstack/health | grep -q "running"; do
+  ATTEMPT=$((ATTEMPT + 1))
+  if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+    echo "   ❌ LocalStack failed to become healthy after ${MAX_ATTEMPTS}s"
+    exit 1
+  fi
+  sleep 1
+done
+echo "   ✅ LocalStack is healthy"
 
 # Step 2: Initialize backend infrastructure  
 echo ""

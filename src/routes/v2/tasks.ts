@@ -47,7 +47,7 @@ const createTaskV2Schema = z.object({
   status: z.string().optional(),
   priority: z.number().min(0).max(10).optional(),
   due_date: z.string().optional(),
-  inputs: z.record(z.any()).optional(),
+  inputs: z.record(z.string(), z.unknown()).optional(),
   is_stray: z.boolean().optional(),
   provenance: provenanceSchema.optional(),
   agent_metadata: agentMetadataSchema.optional(),
@@ -89,17 +89,27 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = request.body as z.infer<typeof createTaskV2Schema>;
       const userCtx = getUserContext(request);
+      if (!userCtx) {
+        reply.status(401).send({ error: "Unauthorized" });
+        return;
+      }
 
       // Build task with v2 fields
-      const task = await putTask({
+      const metadata = {
+        ...(body.provenance ? { provenance: body.provenance } : {}),
+        ...(body.agent_metadata ? { agent_metadata: body.agent_metadata } : {}),
+      };
+
+      const taskInput: any = {
         ...body,
         created_by: userCtx.userId,
-        // Store provenance and agent_metadata in the task
-        metadata: {
-          provenance: body.provenance,
-          agent_metadata: body.agent_metadata,
-        },
-      });
+      };
+
+      if (Object.keys(metadata).length) {
+        taskInput.metadata = metadata;
+      }
+
+      const task = await putTask(taskInput);
 
       reply.status(201).send({
         task_id: task.task_id,
@@ -123,6 +133,10 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as z.infer<typeof listTasksV2QuerySchema>;
       const userCtx = getUserContext(request);
+      if (!userCtx) {
+        reply.status(401).send({ error: "Unauthorized" });
+        return;
+      }
 
       // Get tasks based on filters
       let tasks: Task[] = [];
@@ -198,6 +212,10 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
       const { taskId } = request.params;
       const userCtx = getUserContext(request);
+      if (!userCtx) {
+        reply.status(401).send({ error: "Unauthorized" });
+        return;
+      }
 
       const task = await getTaskById(taskId);
       if (!task) {
@@ -229,6 +247,10 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
       const { taskId } = request.params;
       const { userId, provenance } = request.body;
       const userCtx = getUserContext(request);
+      if (!userCtx) {
+        reply.status(401).send({ error: "Unauthorized" });
+        return;
+      }
 
       const task = await getTaskById(taskId);
       if (!task) {
@@ -239,13 +261,18 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({ error: "Cannot claim this task" });
       }
 
-      const claimedTask = await dbClaimTask(taskId, userId || userCtx.userId);
+      const claimedTaskInput = { ...task } as Task;
+      const claimedTask = await dbClaimTask(
+        claimedTaskInput,
+        userId || userCtx.userId
+      );
 
       // Update provenance if provided
       if (provenance) {
-        const metadata = (claimedTask as any).metadata || {};
+        const metadata = { ...(claimedTask as any).metadata };
         metadata.last_action_provenance = provenance;
-        // Would update in DB here
+        (claimedTask as any).metadata = metadata;
+        // TODO: persist metadata change in data store
       }
 
       reply.send({
@@ -272,6 +299,10 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
       const { taskId } = request.params;
       const { userId, outputs, provenance } = request.body;
       const userCtx = getUserContext(request);
+      if (!userCtx) {
+        reply.status(401).send({ error: "Unauthorized" });
+        return;
+      }
 
       const task = await getTaskById(taskId);
       if (!task) {
@@ -282,11 +313,21 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({ error: "Cannot complete this task" });
       }
 
+      const taskForCompletion = { ...task } as Task;
+      if (outputs) {
+        (taskForCompletion as any).outputs = outputs;
+      }
       const completedTask = await dbCompleteTask(
-        taskId,
-        userId || userCtx.userId,
-        outputs
+        taskForCompletion,
+        userId || userCtx.userId
       );
+
+      if (provenance) {
+        const metadata = { ...(completedTask as any).metadata };
+        metadata.last_action_provenance = provenance;
+        (completedTask as any).metadata = metadata;
+        // TODO: persist metadata change in data store
+      }
 
       reply.send({
         task: completedTask,
@@ -295,4 +336,3 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
     }
   );
 }
-

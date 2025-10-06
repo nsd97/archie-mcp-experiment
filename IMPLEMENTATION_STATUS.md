@@ -96,6 +96,7 @@ docker-compose -f docker-compose.yml -f docker-compose.agents.yml up
 
 # 4. Register Archie user (first time)
 curl -X POST http://localhost:8008/_matrix/client/r0/register \
+  -H "Content-Type: application/json" \
   -d '{"username":"archie","password":"pass","auth":{"type":"m.login.dummy"}}'
 
 # 5. Connect Element to http://localhost:8008

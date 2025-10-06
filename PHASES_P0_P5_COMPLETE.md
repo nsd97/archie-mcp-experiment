@@ -72,13 +72,14 @@ async def check_input_safety(
     """Runs in parallel with agent to catch malicious input."""
     
     # Uses fast gpt-5-nano model for quick checks
+    # Convert input to text if needed
+    input_text = input if isinstance(input, str) else str(input)
     result = await Runner.run(input_safety_agent, input_text, context=ctx.context)
     
     return GuardrailFunctionOutput(
         output_info=result.final_output,
         tripwire_triggered=not result.final_output.is_safe
     )
-```
 
 **Catches:**
 - Prompt injection attempts

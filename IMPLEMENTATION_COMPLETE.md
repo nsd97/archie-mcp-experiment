@@ -392,12 +392,14 @@ docker-compose -f docker-compose.yml -f docker-compose.agents.yml up
 cd agents && python scripts/init_matrix_infra.py && cd ..
 
 # 3. Register Archie
+# 3. Register Archie
 curl -X POST http://localhost:8008/_matrix/client/r0/register \
   -d '{"username":"archie","password":"archie","auth":{"type":"m.login.dummy"}}'
+# Extract the "access_token" field from the JSON response above
 
 # 4. Start Matrix listener (use token from step 3)
 cd agents
-export MATRIX_ACCESS_TOKEN=<token>
+export MATRIX_ACCESS_TOKEN=syt_YXJjaGll_... # Use the access_token from step 3
 export MATRIX_HOMESERVER_URL=http://localhost:8008
 export SQS_QUEUE_URL=http://localhost:4566/000000000000/prompt-queue
 python scripts/matrix_listener.py

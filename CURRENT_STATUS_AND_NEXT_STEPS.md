@@ -373,8 +373,8 @@ When you run `docker-compose -f docker-compose.yml -f docker-compose.agents.yml 
 3. **Register Archie** (after Matrix is up):
    ```bash
    curl -X POST http://localhost:8008/_matrix/client/r0/register \
+     -H "Content-Type: application/json" \
      -d '{"username":"archie","password":"archie123","auth":{"type":"m.login.dummy"}}'
-   ```
 
 4. **Invite Archie in Element:**
    - Create room

@@ -56,6 +56,7 @@ class PromptQueueMessage:
     thread_id: Optional[str] = None
     timestamp: str = ""
     provenance: Dict[str, Any] = None
+    retries: int = 0
     
     def __post_init__(self):
         if not self.provenance:

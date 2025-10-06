@@ -7,7 +7,7 @@ Get the complete system running in under 10 minutes!
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- OpenAI API key for GPT-5
+- OpenAI API key (e.g., for GPT-4)
 - Element desktop client (https://element.io/)
 - Terminal access
 

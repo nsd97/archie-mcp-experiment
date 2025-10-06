@@ -19,7 +19,7 @@ import aioboto3
 import httpx
 from agents import Runner
 
-from .agents.archie import archie_agent
+from .agents.archie_with_mcp import create_archie_with_mcp
 from .context import AgentContext
 from .observability.hooks import RunObservabilityHooks
 from .matrix_adapter import create_matrix_adapter
@@ -198,20 +198,25 @@ Apologize to the user and suggest they try again or contact support."""
         else:
             archie_input = f"Lauren sent an unknown signal type: {kind}"
             
+        # Create Archie with MCP server
+        archie_agent, matrix_mcp_server = await create_archie_with_mcp()
+        
         try:
-            # Run Archie with the signal context
-            result = await Runner.run(
-                archie_agent,
-                archie_input,
-                context=context,
-                hooks=RunObservabilityHooks(),
-                max_turns=3  # Should be quick - just formulate response
-            )
-            
-            print(f"✅ Archie responded to signal: {result.final_output[:100]}...")
-            
-            # Archie should have used send_matrix_message tool
-            # No need to do anything else
+            # Use the MCP server context
+            async with matrix_mcp_server:
+                # Run Archie with the signal context
+                result = await Runner.run(
+                    archie_agent,
+                    archie_input,
+                    context=context,
+                    hooks=RunObservabilityHooks(),
+                    max_turns=3  # Should be quick - just formulate response
+                )
+                
+                print(f"✅ Archie responded to signal: {result.final_output[:100]}...")
+                
+                # Archie should have used Matrix MCP tools
+                # No need to do anything else
             
         finally:
             await backend_client.aclose()

@@ -39,7 +39,7 @@ docker-compose -f docker-compose.yml -f docker-compose.agents.yml up -d
 
 ```bash
 # Register @archie:localhost user
-curl -X POST http://localhost:8008/_matrix/client/r0/register \
+curl -X POST http://localhost:8008/_matrix/client/v3/register \
   -H "Content-Type: application/json" \
   -d '{"username":"archie","password":"archie123","auth":{"type":"m.login.dummy"}}'
 

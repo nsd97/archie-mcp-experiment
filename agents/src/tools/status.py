@@ -11,7 +11,7 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 
 from agents import function_tool, RunContextWrapper
 
-from ..context import AgentContext, TaskStatusResponse
+from src.context import AgentContext, TaskStatusResponse
 
 
 @function_tool

@@ -17,18 +17,18 @@ def test_archie_agent_loaded():
     assert archie_agent is not None
     assert archie_agent.name == "Archie"
     assert "helpful operations assistant" in archie_agent.instructions
-    # Currently no tools until P1/P3
-    assert len(archie_agent.tools) == 0
-    assert len(archie_agent.handoffs) == 0
+    # Archie has 3 tools: get_task_status, send_matrix_message, enqueue_for_lauren
+    assert len(archie_agent.tools) == 3
+    assert len(archie_agent.handoffs) == 0  # Using queues instead
 
 
 def test_lauren_agent_loaded():
     """Test that Lauren agent is properly configured."""
     assert lauren_agent is not None
     assert lauren_agent.name == "Lauren"
-    assert "task executor" in lauren_agent.instructions
-    # Currently no tools until P2
-    assert len(lauren_agent.tools) == 0
+    assert "task classification" in lauren_agent.instructions
+    # Lauren has 3 tools: classify_and_create_task, create_task, notify_archie_signal
+    assert len(lauren_agent.tools) == 3
     
 
 def test_agent_model_configuration():

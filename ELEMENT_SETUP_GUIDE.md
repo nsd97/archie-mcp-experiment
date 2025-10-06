@@ -177,14 +177,14 @@ curl -X POST http://localhost:8008/_matrix/client/r0/register \
 ### Step 5: Start Backend and Agent Services
 
 ```bash
-cd /Users/noahdeskin/ArchieOS\ Backend.worktrees/Noahs-agetnic-experiment
+# Navigate to your ArchieOS backend directory
+cd /path/to/your/archieos-backend
 
 # Start backend
 docker-compose -f docker-compose.yml up -d backend
 
 # Or run backend locally:
 npm run dev
-```
 
 The agent services can wait — for now, just test that Matrix + Element work!
 

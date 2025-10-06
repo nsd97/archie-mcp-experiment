@@ -19,8 +19,8 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      - DYNAMODB_ENDPOINT=http://localstack:4566
-      - BACKEND_URL=http://backend:3000
+      - DYNAMODB_ENDPOINT=http://archieos-localstack:4566
+      - BACKEND_URL=http://archieos-backend-dev:3000
       - AGENT_SERVICE_PORT=8000
       - TRACE_ENABLED=true
       - RATE_LIMIT_REQUESTS_PER_MINUTE=60
@@ -28,11 +28,11 @@ services:
       - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
       - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
       - MATRIX_APP_SERVICE_TOKEN=${MATRIX_APP_SERVICE_TOKEN}
+      - MATRIX_MCP_URL=http://matrix-mcp-server:3001/mcp
+      - MATRIX_USER_ID=${MATRIX_USER_ID:-@archie:localhost}
       # SQS config (for P3)
-      - SQS_QUEUE_URL=http://localstack:4566/000000000000/prompt-queue
-      - SQS_DLQ_URL=http://localstack:4566/000000000000/prompt-queue-dlq
-    depends_on:
-      - localstack
+      - SQS_QUEUE_URL=http://archieos-localstack:4566/000000000000/prompt-queue.fifo
+      - SQS_DLQ_URL=http://archieos-localstack:4566/000000000000/prompt-queue-dlq.fifo
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -57,8 +57,7 @@ services:
       - SYNAPSE_ENABLE_REGISTRATION=yes
       - SYNAPSE_NO_TLS=yes
     volumes:
-      - ./matrix/data:/data
-      - ./matrix/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./data/matrix/synapse:/data
     ports:
       - "8008:8008"
       - "8448:8448"
@@ -67,19 +66,34 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    command: >
-      sh -c "
-        if [ ! -f /data/homeserver.yaml ]; then
-          echo 'Generating Synapse config...' &&
-          python -m synapse.app.homeserver \
-            --server-name localhost \
-            --config-path /data/homeserver.yaml \
-            --generate-config \
-            --report-stats=no &&
-          sed -i 's/enable_registration: false/enable_registration: true/g' /data/homeserver.yaml
-        fi &&
-        exec python -m synapse.app.homeserver -c /data/homeserver.yaml
-      "
+  
+  # Matrix MCP Server for Archie's Matrix output
+  matrix-mcp-server:
+    build: ./external/matrix-mcp-server
+    container_name: archieos-matrix-mcp-server
+    ports:
+      - "3001:3001"
+    environment:
+      # Core Configuration
+      - PORT=3001
+      - ENABLE_OAUTH=false
+      - ENABLE_TOKEN_EXCHANGE=false
+      - CORS_ALLOWED_ORIGINS=
+      # Matrix Configuration
+      - MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
+      - MATRIX_DOMAIN=localhost
+      - MATRIX_CLIENT_ID=archieos-mcp
+      - MATRIX_CLIENT_SECRET=archieos-mcp-secret
+      # Pass Matrix access token
+      - MATRIX_USER_ID=${MATRIX_USER_ID:-@archie:localhost}
+      - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
+    depends_on:
+      - matrix-synapse
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
 
   # Queue consumer service (Prompt Queue → Archie)
   queue-consumer:
@@ -96,22 +110,27 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      - LOCALSTACK_ENDPOINT=http://localstack:4566
-      - BACKEND_URL=http://backend:3000
-      - SQS_QUEUE_URL=http://localstack:4566/000000000000/prompt-queue
-      - SQS_DLQ_URL=http://localstack:4566/000000000000/prompt-queue-dlq
-      - LAUREN_WORK_QUEUE_URL=http://localstack:4566/000000000000/lauren-work-queue
+      - LOCALSTACK_ENDPOINT=http://archieos-localstack:4566
+      - BACKEND_URL=http://archieos-backend-dev:3000
+      - SQS_QUEUE_URL=http://archieos-localstack:4566/000000000000/prompt-queue.fifo
+      - SQS_DLQ_URL=http://archieos-localstack:4566/000000000000/prompt-queue-dlq.fifo
+      - LAUREN_WORK_QUEUE_URL=http://archieos-localstack:4566/000000000000/lauren-work-queue.fifo.fifo
       - MATRIX_EVENTS_TABLE=matrix_events
       - PROCESSED_EVENTS_TABLE=processed_events
+      # Matrix MCP config
+      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
+      - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
+      - MATRIX_MCP_URL=http://matrix-mcp-server:3001/mcp
+      - MATRIX_USER_ID=${MATRIX_USER_ID:-@archie:localhost}
     depends_on:
-      - localstack
       - agent-service
+      - matrix-mcp-server
     command: >
       sh -c "
         echo 'Waiting for infrastructure...' &&
         sleep 20 &&
         echo 'Starting Archie (Prompt Queue consumer)...' &&
-        python -m src.queue_consumer
+        python -u -m src.queue_consumer || (echo 'Queue consumer failed with exit code: $?' && exit 1)
       "
 
   # Lauren Work Queue consumer (Archie → Lauren)
@@ -129,14 +148,12 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      - LOCALSTACK_ENDPOINT=http://localstack:4566
-      - BACKEND_URL=http://backend:3000
-      - LAUREN_WORK_QUEUE_URL=http://localstack:4566/000000000000/lauren-work-queue
-      - LAUREN_WORK_QUEUE_DLQ_URL=http://localstack:4566/000000000000/lauren-work-queue-dlq
-      - ARCHIE_SIGNAL_QUEUE_URL=http://localstack:4566/000000000000/archie-signal-queue
+      - LOCALSTACK_ENDPOINT=http://archieos-localstack:4566
+      - BACKEND_URL=http://archieos-backend-dev:3000
+      - LAUREN_WORK_QUEUE_URL=http://archieos-localstack:4566/000000000000/lauren-work-queue.fifo
+      - LAUREN_WORK_QUEUE_DLQ_URL=http://archieos-localstack:4566/000000000000/lauren-work-queue-dlq.fifo
+      - ARCHIE_SIGNAL_QUEUE_URL=http://archieos-localstack:4566/000000000000/archie-signal-queue.fifo
       - PROCESSED_EVENTS_TABLE=processed_events
-    depends_on:
-      - localstack
       - agent-service
     command: >
       sh -c "
@@ -161,15 +178,13 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      - LOCALSTACK_ENDPOINT=http://localstack:4566
-      - BACKEND_URL=http://backend:3000
-      - ARCHIE_SIGNAL_QUEUE_URL=http://localstack:4566/000000000000/archie-signal-queue
-      - ARCHIE_SIGNAL_QUEUE_DLQ_URL=http://localstack:4566/000000000000/archie-signal-queue-dlq
+      - LOCALSTACK_ENDPOINT=http://archieos-localstack:4566
+      - BACKEND_URL=http://archieos-backend-dev:3000
+      - ARCHIE_SIGNAL_QUEUE_URL=http://archieos-localstack:4566/000000000000/archie-signal-queue.fifo
+      - ARCHIE_SIGNAL_QUEUE_DLQ_URL=http://archieos-localstack:4566/000000000000/archie-signal-queue-dlq
       - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
       - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
       - PROCESSED_EVENTS_TABLE=processed_events
-    depends_on:
-      - localstack
       - agent-service
       - matrix-synapse
     command: >
@@ -180,4 +195,7 @@ services:
         python -m src.archie_signal_consumer
       "
 
-# Networks will be auto-created by docker-compose
+networks:
+  default:
+    external:
+      name: archieosbackend_default

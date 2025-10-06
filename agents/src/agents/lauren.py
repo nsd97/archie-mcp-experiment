@@ -10,9 +10,8 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 from agents import Agent
 
 # Import tools
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from tools.tasks import classify_and_create_task, create_task
-from tools.queues import notify_archie_signal
+from src.tools.tasks import classify_and_create_task, create_task
+from src.tools.queues import notify_archie_signal
 
 
 # Agent definition following SDK pattern

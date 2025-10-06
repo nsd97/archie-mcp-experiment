@@ -126,6 +126,20 @@ python -m uvicorn src.main:app --reload --port 8000
 - `GET /agents` - List available agents and capabilities
 - `GET /metrics` - Prometheus metrics
 
+## Agent Capabilities
+
+### Archie's Tools
+- **get_task_status**: Query tasks by listing, status, assignee with summaries
+- **enqueue_for_lauren**: Queue admin task requests for Lauren
+- **Matrix MCP tools**: Send messages via the Matrix MCP server (send-message, send-direct-message)
+
+### Lauren's Tools
+- **classify_and_create_task**: Classify admin intents and create OPEN/UNCLAIMED tasks
+- **create_task**: Direct task creation with validation
+- **notify_archie_signal**: Signal completion back to Archie
+
+Note: Task claiming, completion, and updates are done by human admins via the frontend UI.
+
 ## Testing
 
 ```bash
@@ -208,7 +222,7 @@ View traces at: https://platform.openai.com/traces
 
 ## Next Steps
 
-1. Implement P1 tools for Archie (DB read capabilities)
-2. Implement P2 tools for Lauren (task mutations)
-3. Add Matrix integration and prompt queue (P3)
-4. Configure handoffs between Archie and Lauren
+1. Add additional read-only tools for Archie
+2. Enhance Lauren's classification rules
+3. Add monitoring and alerting for queue processing
+4. Implement production deployment configurations

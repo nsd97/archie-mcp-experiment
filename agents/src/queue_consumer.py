@@ -20,7 +20,9 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 import aioboto3
 from agents import Runner, RunContextWrapper
 
-from .agents.archie import archie_agent
+from .agents.archie_direct import archie_direct
+import httpx
+import uuid
 from .context import AgentContext
 from .matrix_adapter import PromptQueueMessage, create_matrix_adapter
 
@@ -54,8 +56,9 @@ class PromptQueueConsumer:
         print(f"   Queue: {self.queue_url}")
         print(f"   DLQ: {self.dlq_url}")
         
-        # Initialize Matrix adapter
-        self.matrix_adapter = await create_matrix_adapter()
+        # Skip Matrix adapter for now - it's causing issues
+        self.matrix_adapter = None
+        print("⚠️ Matrix adapter disabled for debugging")
         
         while True:
             try:
@@ -160,44 +163,79 @@ class PromptQueueConsumer:
         
         try:
             # Run Archie with the user's message
+            print(f"🤖 Running Archie agent...")
             result = await Runner.run(
-                archie_agent,
+                archie_direct,
                 prompt_msg.content,
-                context=context
+                context=context,
+                max_turns=3
             )
             
             print(f"✅ Agent completed: {result.final_output[:100]}...")
             
-            # The agent should have sent responses via send_matrix_message tool
-            # Mark the original event as processed with response tracking
+            # Send response to Matrix directly
+            await self._send_matrix_response(
+                prompt_msg.room_id,
+                result.final_output
+            )
+            
+            # Mark the original event as processed
             if self.matrix_adapter:
                 await self.matrix_adapter.mark_event_processed(
                     prompt_msg.correlation_id
                 )
-                
         finally:
             await backend_client.aclose()
             
     async def _is_duplicate(self, event_id: str) -> bool:
         """Check if we've already processed this event."""
-        async with self.db_session as db:
-            table = await db.Table(self.processed_table)
-            try:
-                response = await table.get_item(Key={"event_id": event_id})
-                return "Item" in response
-            except Exception:
-                return False
+        # db_session is already the resource, not a context manager
+        table = await self.db_session.Table(self.processed_table)
+        try:
+            response = await table.get_item(Key={"event_id": event_id})
+            return "Item" in response
+        except Exception:
+            return False
                 
+    async def _send_matrix_response(self, room_id: str, content: str):
+        """Send response directly to Matrix room."""
+        homeserver = os.getenv("MATRIX_HOMESERVER_URL", "http://matrix-synapse:8008")
+        access_token = os.getenv("MATRIX_ACCESS_TOKEN")
+        
+        if not access_token:
+            print("❌ No Matrix access token configured")
+            return
+            
+        async with httpx.AsyncClient() as client:
+            try:
+                txn_id = str(uuid.uuid4())
+                response = await client.put(
+                    f"{homeserver}/_matrix/client/r0/rooms/{room_id}/send/m.room.message/{txn_id}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    json={
+                        "msgtype": "m.text",
+                        "body": content
+                    }
+                )
+                
+                if response.status_code == 200:
+                    print(f"✅ Sent Matrix reply to {room_id}")
+                else:
+                    print(f"❌ Failed to send Matrix reply: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"❌ Error sending Matrix reply: {e}")
+    
     async def _mark_processed(self, event_id: str):
         """Mark an event as processed."""
-        async with self.db_session as db:
-            table = await db.Table(self.processed_table)
-            await table.put_item(
-                Item={
-                    "event_id": event_id,
-                    "processed_at": datetime.utcnow().isoformat() + "Z"
-                }
-            )
+        # db_session is already the resource, not a context manager
+        table = await self.db_session.Table(self.processed_table)
+        await table.put_item(
+            Item={
+                "event_id": event_id,
+                "processed_at": datetime.utcnow().isoformat() + "Z"
+            }
+        )
             
     async def _delete_message(self, message: Dict[str, Any]):
         """Delete a message from SQS after successful processing."""
@@ -287,13 +325,17 @@ async def run_worker():
     
     endpoint_url = os.getenv("LOCALSTACK_ENDPOINT", "http://localhost:4566")
     
-    db_session = session.resource(
+    # Create the DB resource context manager
+    db_resource = session.resource(
         "dynamodb",
         endpoint_url=endpoint_url,
         region_name=os.getenv("AWS_REGION", "us-east-1"),
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test")
     )
+    
+    # Enter the context to get the actual resource
+    db_session = await db_resource.__aenter__()
     
     sqs_client = await session.client(
         "sqs",

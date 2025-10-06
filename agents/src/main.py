@@ -5,12 +5,12 @@ import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-import aioboto3
-import httpx
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from prometheus_client import Counter, Histogram, generate_latest
+import aioboto3  # pyright: ignore[reportMissingImports]
+import httpx  # pyright: ignore[reportMissingImports]
+from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
+from fastapi import FastAPI, HTTPException  # pyright: ignore[reportMissingImports]
+from fastapi.responses import JSONResponse  # pyright: ignore[reportMissingImports]
+from prometheus_client import Counter, Histogram, generate_latest  # pyright: ignore[reportMissingImports]
 
 # Add vendored SDK to path
 sys.path.insert(0, "/app/external/openai-agents-python/src")
@@ -188,19 +188,20 @@ async def list_agents():
                 "role": "user_facing_router",
                 "capabilities": [
                     "get_task_status",
-                    "send_matrix_message",
-                    "handoff_to_lauren"
-                ]
+                    "enqueue_for_lauren",
+                    "Matrix MCP tools (send-message, send-direct-message)"
+                ],
+                "description": "User-facing agent that answers questions and routes task requests"
             },
             {
                 "name": "Lauren",
-                "role": "task_executor",
+                "role": "task_classifier",
                 "capabilities": [
+                    "classify_and_create_task",
                     "create_task",
-                    "claim_task",
-                    "unclaim_task",
-                    "complete_task"
-                ]
+                    "notify_archie_signal"
+                ],
+                "description": "Task classification agent that creates OPEN/UNCLAIMED tasks for human admins"
             }
         ]
     }

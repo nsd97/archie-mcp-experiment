@@ -184,9 +184,10 @@ async def send_matrix_message(
 - `POST /v2/tasks` - Create with provenance
 - `GET /v2/tasks` - List with enhanced filters
 - `GET /v2/tasks/:taskId` - Get with full metadata
-- `POST /v2/agent/invoke` - Direct agent invocation
-- `GET /v2/agent/sessions/:id` - Session management
+- `POST /v2/agent/invoke` - Direct agent invocation (stub only – P6)
+- `GET /v2/agent/sessions/:id` - Session management (not implemented – P6)
 - `GET /v2/agent/status` - Agent service health
+- `GET /api/version` - Version information
 - `GET /api/version` - Version information
 
 **Acceptance Criteria Met:**

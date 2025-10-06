@@ -15,7 +15,7 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 
 from agents import function_tool, RunContextWrapper
 
-from ..context import AgentContext, MessageSentResponse
+from src.context import AgentContext, MessageSentResponse
 
 
 # Global Matrix adapter instance (initialized on first use)
@@ -27,7 +27,7 @@ async def _get_matrix_adapter():
     global _matrix_adapter
     
     if _matrix_adapter is None:
-        from ..matrix_adapter import create_matrix_adapter
+        from src.matrix_adapter import create_matrix_adapter
         _matrix_adapter = await create_matrix_adapter()
         
     return _matrix_adapter

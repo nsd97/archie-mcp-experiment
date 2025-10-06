@@ -8,13 +8,14 @@ import sys
 sys.path.insert(0, "/app/external/openai-agents-python/src")
 
 from agents import Agent, handoff
-from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+from agents.extensions.handoff_prompt import (  # pyright: ignore[reportMissingImports]
+    RECOMMENDED_PROMPT_PREFIX,
+)
 
 # Import tools
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from tools.status import get_task_status
-from tools.matrix import send_matrix_message
-from tools.queues import enqueue_for_lauren
+from src.tools.status import get_task_status
+from src.tools.matrix import send_matrix_message
+from src.tools.queues import enqueue_for_lauren
 
 
 # Agent definition following SDK pattern

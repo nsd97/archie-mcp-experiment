@@ -15,7 +15,7 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 
 from agents import function_tool, RunContextWrapper
 
-from ..context import AgentContext
+from src.context import AgentContext
 
 
 @dataclass
@@ -112,7 +112,6 @@ async def enqueue_for_lauren(
     )
     
     # Get SQS client from context
-    # For now, we'll need to add this to AgentContext
     queue_url = os.getenv("LAUREN_WORK_QUEUE_URL")
     if not queue_url:
         raise Exception("LAUREN_WORK_QUEUE_URL not configured")
@@ -133,6 +132,7 @@ async def enqueue_for_lauren(
         await sqs_client.send_message(
             QueueUrl=queue_url,
             MessageBody=message.to_json(),
+            MessageGroupId=context.room_id,  # FIFO queue requires this
             MessageAttributes={
                 'correlation_id': {
                     'StringValue': context.correlation_id,
@@ -218,6 +218,7 @@ async def notify_archie_signal(
         await sqs_client.send_message(
             QueueUrl=queue_url,
             MessageBody=signal.to_json(),
+            MessageGroupId=context.room_id,  # FIFO queue requires this
             MessageAttributes={
                 'correlation_id': {
                     'StringValue': context.correlation_id,

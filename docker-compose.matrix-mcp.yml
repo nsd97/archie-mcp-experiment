@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  matrix-mcp-server:
+    build: ./external/matrix-mcp-server
+    container_name: archieos-matrix-mcp-server
+    ports:
+      - "3001:3001"
+    environment:
+      # Core Configuration
+      - PORT=3001
+      - ENABLE_OAUTH=false
+      - ENABLE_TOKEN_EXCHANGE=false
+      - CORS_ALLOWED_ORIGINS=
+      # Matrix Configuration
+      - MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
+      - MATRIX_DOMAIN=localhost
+      - MATRIX_CLIENT_ID=archieos-mcp
+      - MATRIX_CLIENT_SECRET=archieos-mcp-secret
+    volumes:
+      - ./external/matrix-mcp-server/src:/app/src
+    networks:
+      - archieos-network
+    depends_on:
+      - matrix-synapse
+
+networks:
+  archieos-network:
+    external: true

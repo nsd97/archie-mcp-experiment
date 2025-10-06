@@ -5,8 +5,18 @@ fastapi==0.115.0
 pydantic==2.9.2
 httpx==0.27.2
 
-# AWS SDK
-boto3==1.35.30
+# OpenAI client (required by vendored OpenAI Agents SDK)
+openai>=1.107.1,<2
+# Vendored SDK runtime deps not installed via pip; include here explicitly
+griffe>=1.5.6,<2
+mcp>=1.11.0,<2
+requests>=2.0,<3
+types-requests>=2.0,<3
+
+# AWS SDK (pin to compatible versions to avoid botocore conflicts)
+# Align versions: aiobotocore 2.13.1 ↔ botocore 1.34.120..1.34.131 ↔ boto3 1.34.120..1.34.131
+boto3==1.34.120
+aiobotocore==2.13.1
 aioboto3==13.1.1
 
 # Matrix integration (for P3)

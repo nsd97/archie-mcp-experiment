@@ -11,11 +11,12 @@ import json
 import asyncio
 import traceback
 from datetime import datetime
+from typing import Any, Dict
 
 sys.path.insert(0, "/app/external/openai-agents-python/src")
 
-import aioboto3
-import httpx
+import aioboto3  # pyright: ignore[reportMissingImports]
+import httpx  # pyright: ignore[reportMissingImports]
 from agents import Runner
 
 from .agents.lauren import lauren_agent
