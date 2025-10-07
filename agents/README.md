@@ -6,12 +6,12 @@ Python-based agent service using the OpenAI Agents SDK for task management and M
 
 - **Archie**: User-facing router agent that:
   - Answers status queries directly
-  - Queues admin task requests to Lauren Work Queue
+  - Queues admin task requests to Lauren Work Queue (one in-flight message per Matrix room)
   - Processes completion signals from Lauren
-  - Responds to users in Matrix/Element
+  - Responds to users in Matrix/Element via Matrix MCP tools
   
 - **Lauren**: Task classifier and creator agent that:
-  - Processes admin task intents from Lauren Work Queue
+  - Processes admin task intents from Lauren Work Queue (FIFO ordering enforced by MessageGroupId)
   - Classifies using legacy rules
   - Creates OPEN/UNCLAIMED tasks for human admins
   - Signals Archie when done
@@ -19,7 +19,7 @@ Python-based agent service using the OpenAI Agents SDK for task management and M
 
 ### Three-Queue System
 
-1. **Prompt Queue** — Matrix → Archie (user messages)
+1. **Prompt Queue** — Matrix → Archie (user messages, serialized per room)
 2. **Lauren Work Queue** — Archie → Lauren (admin task intents)
 3. **Archie Signal Queue** — Lauren → Archie (completion signals)
 
@@ -56,7 +56,7 @@ MATRIX_ACCESS_TOKEN=syt_...
 MATRIX_APP_SERVICE_TOKEN=as_...
 
 # SQS Configuration (P3)
-SQS_QUEUE_URL=http://localstack:4566/000000000000/prompt-queue
+SQS_QUEUE_URL=http://localstack:4566/000000000000/prompt-queue.fifo
 ```
 
 ## Running Locally
@@ -78,27 +78,30 @@ docker-compose -f docker-compose.agents.yml up agent-service matrix-synapse queu
 ### Running Matrix Components
 
 1. **Register a Matrix user for Archie:**
-```bash
-# Register user on local Synapse
-curl -X POST http://localhost:8008/_matrix/client/r0/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"archie","password":"archie-password","auth":{"type":"m.login.dummy"}}'
-```
+
+   ```bash
+   # Register user on local Synapse
+   curl -X POST http://localhost:8008/_matrix/client/r0/register \
+     -H "Content-Type: application/json" \
+     -d '{"username":"archie","password":"archie-password","auth":{"type":"m.login.dummy"}}'
+   ```
 
 2. **Start the Matrix listener (separate terminal):**
-```bash
-cd agents
-export MATRIX_HOMESERVER_URL=http://localhost:8008
-export MATRIX_ACCESS_TOKEN=<token-from-registration>
-export SQS_QUEUE_URL=http://localhost:4566/000000000000/prompt-queue
-python scripts/matrix_listener.py
-```
+
+   ```bash
+   cd agents
+   export MATRIX_HOMESERVER_URL=http://localhost:8008
+   export MATRIX_ACCESS_TOKEN=<token-from-registration>
+   export SQS_QUEUE_URL=http://localhost:4566/000000000000/prompt-queue
+   python scripts/matrix_listener.py
+   ```
 
 3. **Use Element to interact:**
-- Download Element desktop: https://element.io/
-- Connect to `http://localhost:8008`
-- Create a room and invite `@archie:localhost`
-- Send messages like "How are my tasks going?"
+
+   - Download Element desktop: [Element](https://element.io/)
+   - Connect to `http://localhost:8008`
+   - Create a room and invite `@archie:localhost`
+   - Send messages like "How are my tasks going?"
 
 ### Without Docker (Development)
 
@@ -112,8 +115,8 @@ source venv/bin/activate  # or `venv\Scripts\activate` on Windows
 # Install dependencies
 pip install -r requirements.txt
 
-# Add SDK to Python path
-export PYTHONPATH=/path/to/external/openai-agents-python/src:$PYTHONPATH
+# Ensure the SDK is on your Python path (e.g., `export PYTHONPATH=$PWD/external/openai-agents-python/src:$PYTHONPATH` or
+# install it with `pip install -e external/openai-agents-python`).
 
 # Run the service
 python -m uvicorn src.main:app --reload --port 8000
@@ -129,11 +132,13 @@ python -m uvicorn src.main:app --reload --port 8000
 ## Agent Capabilities
 
 ### Archie's Tools
+
 - **get_task_status**: Query tasks by listing, status, assignee with summaries
 - **enqueue_for_lauren**: Queue admin task requests for Lauren
 - **Matrix MCP tools**: Send messages via the Matrix MCP server (send-message, send-direct-message)
 
 ### Lauren's Tools
+
 - **classify_and_create_task**: Classify admin intents and create OPEN/UNCLAIMED tasks
 - **create_task**: Direct task creation with validation
 - **notify_archie_signal**: Signal completion back to Archie

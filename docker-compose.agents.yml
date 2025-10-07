@@ -15,7 +15,7 @@ services:
       - NODE_ENV=local
       - LOG_LEVEL=debug
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -25,27 +25,23 @@ services:
       - TRACE_ENABLED=true
       - RATE_LIMIT_REQUESTS_PER_MINUTE=60
       # Matrix config (for P3)
-      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
-      - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
+      - PROCESSED_EVENTS_TABLE=processed_events
       - MATRIX_APP_SERVICE_TOKEN=${MATRIX_APP_SERVICE_TOKEN}
       - MATRIX_MCP_URL=http://matrix-mcp-server:3001/mcp
       - MATRIX_USER_ID=${MATRIX_USER_ID:-@archie:localhost}
       # SQS config (for P3)
       - SQS_QUEUE_URL=http://archieos-localstack:4566/000000000000/prompt-queue.fifo
       - SQS_DLQ_URL=http://archieos-localstack:4566/000000000000/prompt-queue-dlq.fifo
+    depends_on:
+      - localstack
+      - matrix-synapse
+    command: python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    command: >
-      sh -c "
-        echo 'Installing dependencies...' &&
-        pip install -r requirements.txt &&
-        echo 'Starting agent service...' &&
-        python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-      "
 
   # Matrix Synapse server
   matrix-synapse:
@@ -106,7 +102,7 @@ services:
       - ./external/openai-agents-python:/app/external/openai-agents-python:ro
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -114,7 +110,7 @@ services:
       - BACKEND_URL=http://archieos-backend-dev:3000
       - SQS_QUEUE_URL=http://archieos-localstack:4566/000000000000/prompt-queue.fifo
       - SQS_DLQ_URL=http://archieos-localstack:4566/000000000000/prompt-queue-dlq.fifo
-      - LAUREN_WORK_QUEUE_URL=http://archieos-localstack:4566/000000000000/lauren-work-queue.fifo.fifo
+      - LAUREN_WORK_QUEUE_URL=http://archieos-localstack:4566/000000000000/lauren-work-queue.fifo
       - MATRIX_EVENTS_TABLE=matrix_events
       - PROCESSED_EVENTS_TABLE=processed_events
       # Matrix MCP config
@@ -144,7 +140,7 @@ services:
       - ./external/openai-agents-python:/app/external/openai-agents-python:ro
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -163,6 +159,37 @@ services:
         python -m src.lauren_consumer
       "
 
+  # Matrix listener (Matrix → Prompt Queue)
+  matrix-listener:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: archieos-matrix-listener
+    volumes:
+      - ./agents:/app
+      - ./external/openai-agents-python:/app/external/openai-agents-python:ro
+    environment:
+      - MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
+      - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
+      - MATRIX_USER_ID=${MATRIX_USER_ID:-@archie:localhost}
+      - SQS_QUEUE_URL=http://archieos-localstack:4566/000000000000/prompt-queue.fifo
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - LOCALSTACK_ENDPOINT=http://archieos-localstack:4566
+      - MATRIX_EVENTS_TABLE=matrix_events
+      - PROCESSED_EVENTS_TABLE=processed_events
+    depends_on:
+      - matrix-synapse
+      - localstack
+    command: >
+      sh -c "
+        echo 'Waiting for Matrix and infrastructure...' &&
+        sleep 30 &&
+        echo 'Starting Matrix listener...' &&
+        python -u scripts/matrix_listener.py
+      "
+
   # Archie Signal Queue consumer (Lauren → Archie)
   archie-signal-consumer:
     build:
@@ -174,14 +201,14 @@ services:
       - ./external/openai-agents-python:/app/external/openai-agents-python:ro
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
       - LOCALSTACK_ENDPOINT=http://archieos-localstack:4566
       - BACKEND_URL=http://archieos-backend-dev:3000
       - ARCHIE_SIGNAL_QUEUE_URL=http://archieos-localstack:4566/000000000000/archie-signal-queue.fifo
-      - ARCHIE_SIGNAL_QUEUE_DLQ_URL=http://archieos-localstack:4566/000000000000/archie-signal-queue-dlq
+      - ARCHIE_SIGNAL_QUEUE_DLQ_URL=http://archieos-localstack:4566/000000000000/archie-signal-queue-dlq.fifo
       - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-http://matrix-synapse:8008}
       - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN}
       - PROCESSED_EVENTS_TABLE=processed_events

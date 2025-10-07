@@ -4,8 +4,6 @@ Following SDK patterns from external/openai-agents-python/docs/agents.md
 """
 
 import os
-import sys
-sys.path.insert(0, "/app/external/openai-agents-python/src")
 
 from agents import Agent, handoff
 from agents.extensions.handoff_prompt import (  # pyright: ignore[reportMissingImports]
@@ -15,14 +13,12 @@ from agents.extensions.handoff_prompt import (  # pyright: ignore[reportMissingI
 # Import tools
 from src.tools.status import get_task_status
 from src.tools.matrix import send_matrix_message
+from src.logging_config import get_logger
 from src.tools.queues import enqueue_for_lauren
 
 
-# Agent definition following SDK pattern
-archie_agent = Agent(
-    name="Archie",
-    instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
-    
+ARCHIE_INSTRUCTIONS = f"""{RECOMMENDED_PROMPT_PREFIX}
+
 You are Archie, the helpful operations assistant for ArchieOS real estate management system.
 
 Your primary responsibilities:
@@ -71,8 +67,25 @@ Important workflow:
 2. If it's an admin task request → use enqueue_for_lauren + send_matrix_message (confirm queued)
 3. You'll get Lauren's completion signal later on the Archie Signal Queue (separate consumer)
 
-Remember: You're the friendly interface. Keep users informed!""",
+Remember: You're the friendly interface. Keep users informed!"""
+
+
+# Agent definition following SDK pattern
+logger = get_logger(__name__)
+
+archie_agent = Agent(
+    name="Archie",
+    instructions=ARCHIE_INSTRUCTIONS,
     model="gpt-5",
     tools=[get_task_status, send_matrix_message, enqueue_for_lauren],
     handoffs=[],  # No direct handoffs - using queues for async communication
+)
+
+logger.debug(
+    "Archie agent configured",
+    extra={
+        "model": archie_agent.model,
+        "tool_count": len(archie_agent.tools),
+        "instructions_len": len(ARCHIE_INSTRUCTIONS),
+    },
 )

@@ -4,15 +4,24 @@ import sys
 import os
 from unittest.mock import AsyncMock, Mock, patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, "/app/external/openai-agents-python/src")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+VENDORED_SDK = os.path.join(PROJECT_ROOT, "external", "openai-agents-python", "src")
+if VENDORED_SDK not in sys.path:
+    sys.path.insert(0, VENDORED_SDK)
 
 import pytest
 from httpx import Response
 from agents import RunContextWrapper
 
 from src.context import AgentContext, Task
-from tools.tasks import classify_and_create_task, create_task, _classify_admin_intent, _get_task_name_from_catalog
+from src.tools.tasks import (
+    _classify_and_create_task_impl,
+    _create_task_impl,
+    _classify_admin_intent,
+    _get_task_name_from_catalog,
+)
 
 
 @pytest.fixture
@@ -62,11 +71,11 @@ async def test_classify_and_create_photo_task(mock_context):
     mock_context.context.backend_client.post.return_value = mock_response
     
     # Mock notify_archie_signal (will be called automatically)
-    with patch('tools.tasks.notify_archie_signal', new=AsyncMock()) as mock_signal:
+    with patch('src.tools.tasks.notify_archie_signal_impl', new=AsyncMock()) as mock_signal:
         mock_signal.return_value = {"ok": True}
         
         # Call the tool
-        result = await classify_and_create_task(
+        result = await _classify_and_create_task_impl(
             mock_context,
             raw_text="Book photos for 123 Main St next week",
             listing_hint="123 Main St",
@@ -163,6 +172,7 @@ async def test_create_task_always_unclaimed(mock_context):
     mock_response.json.return_value = {
         "task": {
             "task_id": "task-direct-789",
+            "name": "Post to MLS",
             "status": "OPEN",
             "claim_status": "UNCLAIMED",
             "assigned_to": None,
@@ -174,9 +184,9 @@ async def test_create_task_always_unclaimed(mock_context):
     
     mock_context.context.backend_client.post.return_value = mock_response
     
-    with patch('tools.tasks.notify_archie_signal', new=AsyncMock()):
+    with patch('src.tools.tasks.notify_archie_signal_impl', new=AsyncMock()):
         # Create task directly
-        result = await create_task(
+        result = await _create_task_impl(
             mock_context,
             listing_id="listing-123",
             task_def_id="SALE::POST_TO_MLS@v1",

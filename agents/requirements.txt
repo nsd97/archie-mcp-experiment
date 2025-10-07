@@ -31,4 +31,4 @@ pytest-asyncio==0.24.0
 pytest-mock==3.14.0
 
 # The OpenAI Agents SDK is vendored at /external/openai-agents-python/
-# We'll add it to PYTHONPATH instead of installing
+# Ensure it is on PYTHONPATH (e.g., via Docker ENV, local shell export, or pip install -e external/openai-agents-python)

@@ -23,6 +23,9 @@ from .agents.archie_with_mcp import create_archie_with_mcp
 from .context import AgentContext
 from .observability.hooks import RunObservabilityHooks
 from .matrix_adapter import create_matrix_adapter
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ArchieSignalConsumer:
@@ -53,13 +56,23 @@ class ArchieSignalConsumer:
         print(f"🚀 Starting Archie Signal Queue consumer")
         print(f"   Queue: {self.queue_url}")
         print(f"   DLQ: {self.dlq_url}")
+        logger.info(
+            "Archie signal consumer starting",
+            extra={
+                "queue_url": self.queue_url,
+                "dlq_url": self.dlq_url,
+                "max_concurrent": self.max_concurrent,
+            },
+        )
         
         # Initialize Matrix adapter for sending responses
         try:
             self.matrix_adapter = await create_matrix_adapter()
             print(f"✓ Matrix adapter initialized")
+            logger.info("Matrix adapter initialized for Archie signal consumer")
         except Exception as e:
             print(f"⚠️  Matrix adapter not available: {e}")
+            logger.warning("Matrix adapter not available: %s", e)
             # Continue anyway - Archie can still process signals
         
         while True:
@@ -67,9 +80,11 @@ class ArchieSignalConsumer:
                 await self._poll_and_process()
             except KeyboardInterrupt:
                 print("\n👋 Shutting down Archie signal consumer")
+                logger.info("Archie signal consumer received shutdown signal")
                 break
             except Exception as e:
                 print(f"❌ Consumer error: {e}")
+                logger.exception("Archie signal consumer loop error: %s", e)
                 await asyncio.sleep(5)
                 
     async def _poll_and_process(self):
@@ -88,6 +103,7 @@ class ArchieSignalConsumer:
             return
             
         print(f"📥 Archie received {len(messages)} signals from Lauren")
+        logger.debug("Received signals", extra={"count": len(messages)})
         
         # Process signals
         tasks = []
@@ -102,8 +118,16 @@ class ArchieSignalConsumer:
         for i, (message, result) in enumerate(zip(messages, results)):
             if not isinstance(result, Exception):
                 await self._delete_message(message)
+                logger.debug("Deleted processed signal", extra={"message_id": message.get('MessageId')})
             else:
                 print(f"⚠️  Failed to process signal: {result}")
+                logger.warning(
+                    "Signal processing failed",
+                    extra={
+                        "message_id": message.get('MessageId'),
+                        "error": str(result),
+                    },
+                )
                 
     async def _process_signal(self, sqs_message: Dict[str, Any]):
         """Process a single signal from Lauren."""
@@ -122,11 +146,20 @@ class ArchieSignalConsumer:
                 thread_id = body.get("thread_id")
                 
                 print(f"📬 Signal from Lauren: {kind} - {correlation_id}")
+                logger.info(
+                    "Processing signal",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "kind": kind,
+                        "task_id": task_id,
+                    },
+                )
                 
                 # Check for duplicate
                 signal_id = f"signal-{correlation_id}-{kind}"
                 if await self._is_duplicate(signal_id):
                     print(f"⏭️  Skipping duplicate signal {signal_id}")
+                    logger.info("Duplicate signal skipped", extra={"signal_id": signal_id})
                     return True
                     
                 # Invoke Archie to decide response
@@ -134,16 +167,25 @@ class ArchieSignalConsumer:
                 
                 # Mark as processed
                 await self._mark_processed(signal_id)
+                logger.info("Signal processed", extra={"signal_id": signal_id})
                 return True
                 
             except Exception as e:
                 print(f"❌ Error processing signal: {e}")
                 traceback.print_exc()
+                logger.exception("Error processing signal: %s", e)
                 
                 # Check DLQ threshold
                 receive_count = int(sqs_message.get('Attributes', {}).get('ApproximateReceiveCount', 0))
                 if receive_count >= 5:
                     await self._send_to_dlq(sqs_message, str(e))
+                    logger.error(
+                        "Signal sent to DLQ",
+                        extra={
+                            "signal_id": signal_id,
+                            "receive_count": receive_count,
+                        },
+                    )
                     
                 raise
                 
@@ -156,6 +198,10 @@ class ArchieSignalConsumer:
         backend_client = httpx.AsyncClient(
             base_url=self.backend_url,
             timeout=30.0
+        )
+        logger.debug(
+            "Created backend client for Archie signal",
+            extra={"base_url": self.backend_url},
         )
         
         # Build context
@@ -214,12 +260,21 @@ Apologize to the user and suggest they try again or contact support."""
                 )
                 
                 print(f"✅ Archie responded to signal: {result.final_output[:100]}...")
+                logger.info(
+                    "Archie responded to signal",
+                    extra={
+                        "correlation_id": context.correlation_id,
+                        "kind": kind,
+                        "result_preview": str(result.final_output)[:256],
+                    },
+                )
                 
                 # Archie should have used Matrix MCP tools
                 # No need to do anything else
             
         finally:
             await backend_client.aclose()
+            logger.debug("Closed backend client for Archie signal handling")
             
     async def _is_duplicate(self, signal_id: str) -> bool:
         """Check if we've already processed this signal."""

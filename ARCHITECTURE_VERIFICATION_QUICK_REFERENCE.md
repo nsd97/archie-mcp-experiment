@@ -8,7 +8,7 @@
 
 ## 📊 System Flow Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         USER (Matrix)                            │
 └────────────────────────────┬────────────────────────────────────┘
@@ -135,7 +135,7 @@ result = await Runner.run(
 - [ ] **Tools**: Read-only + Matrix + Lauren queue
 - [ ] **Pattern**: Matches SDK documentation
 
-### Lauren Setup  
+### Lauren Setup
 - [ ] **File**: `agents/src/agents/lauren.py` uses `Agent()` from SDK
 - [ ] **File**: `agents/src/lauren_consumer.py` has outer loop + `Runner.run()`
 - [ ] **Concurrency**: Global semaphore (max 5 total)
@@ -209,7 +209,7 @@ while not done:
     response = call_openai_directly()
     if has_tool_calls:
         execute_tools()
-```
+```text
 
 ### ✅ Use SDK Loop
 ```python
@@ -251,6 +251,7 @@ await mark_processed(correlation_id)
 ## 🚀 Quick Investigation Steps
 
 ### Step 1: Verify SDK Loop (5 min)
+
 ```bash
 # 1. Open Archie agent
 cat agents/src/agents/archie.py | grep "Agent("
@@ -265,11 +266,12 @@ ls external/openai-agents-python/docs/running_agents.md
 **Expected**: All files exist, patterns match
 
 ### Step 2: Verify Lauren Mirrors Archie (5 min)
+
 ```bash
 # 1. Open Lauren agent
 cat agents/src/agents/lauren.py | grep "Agent("
 
-# 2. Open Lauren consumer  
+# 2. Open Lauren consumer
 cat agents/src/lauren_consumer.py | grep "Runner.run"
 
 # 3. Compare structures
@@ -279,6 +281,7 @@ diff -u agents/src/queue_consumer.py agents/src/lauren_consumer.py
 **Expected**: Similar structure, both use `Runner.run()`
 
 ### Step 3: Verify Queue Setup (5 min)
+
 ```bash
 # 1. Check queue tools
 cat agents/src/tools/queues.py | grep "def enqueue_for_lauren"
@@ -291,6 +294,7 @@ grep QUEUE docker-compose.agents.yml
 **Expected**: Two queue communication tools exist
 
 ### Step 4: Verify Concurrency (3 min)
+
 ```bash
 # Check Archie concurrency
 cat agents/src/queue_consumer.py | grep "semaphore"

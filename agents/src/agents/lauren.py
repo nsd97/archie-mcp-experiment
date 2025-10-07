@@ -5,6 +5,7 @@ Following SDK patterns from external/openai-agents-python/docs/agents.md
 
 import os
 import sys
+
 sys.path.insert(0, "/app/external/openai-agents-python/src")
 
 from agents import Agent
@@ -12,12 +13,15 @@ from agents import Agent
 # Import tools
 from src.tools.tasks import classify_and_create_task, create_task
 from src.tools.queues import notify_archie_signal
+from src.logging_config import get_logger
 
 
 # Agent definition following SDK pattern
+logger = get_logger(__name__)
+
 lauren_agent = Agent(
     name="Lauren",
-    instructions="""You are Lauren, the task classifier and creator for ArchieOS real estate management system.
+    instructions="""You are Lauren, the task classification and creation agent for ArchieOS real estate management system.
 
 Your SOLE responsibility:
 Classify incoming admin task intents from Archie and create OPEN/UNCLAIMED tasks that appear
@@ -64,4 +68,13 @@ Your job is classification and creation only!""",
         create_task,
         notify_archie_signal
     ]
+)
+
+logger.debug(
+    "Lauren agent configured",
+    extra={
+        "model": lauren_agent.model,
+        "tool_count": len(lauren_agent.tools),
+        "instructions_len": len(lauren_agent.instructions),
+    },
 )

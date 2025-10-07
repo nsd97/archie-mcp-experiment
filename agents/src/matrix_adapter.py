@@ -78,7 +78,7 @@ class MatrixAdapter:
         self,
         homeserver_url: str,
         access_token: str,
-        db_session: Any,  # aioboto3 DynamoDB resource
+        db_session: Any,  # aioboto3 Session (not resource)
         sqs_client: Any,  # aioboto3 SQS client
         queue_url: str,
         user_id: str = "@archie:matrix.org"
@@ -86,12 +86,14 @@ class MatrixAdapter:
         self.homeserver_url = homeserver_url
         self.access_token = access_token
         self.user_id = user_id
-        self.db_session = db_session
+        self.db_session = db_session  # Store the session, not resource
         self.sqs_client = sqs_client
         self.queue_url = queue_url
         self.client: Optional[AsyncClient] = None
         self.matrix_events_table = os.getenv("MATRIX_EVENTS_TABLE", "matrix_events")
         self.processed_events_table = os.getenv("PROCESSED_EVENTS_TABLE", "processed_events")
+        self.db_endpoint = os.getenv("DYNAMODB_ENDPOINT", os.getenv("LOCALSTACK_ENDPOINT"))
+        self.db_region = os.getenv("AWS_REGION", "us-east-1")
         
     async def connect(self):
         """Connect to Matrix homeserver."""
@@ -128,15 +130,24 @@ class MatrixAdapter:
         
     async def _on_room_message(self, room: Any, event: RoomMessageText):
         """Handle incoming room messages."""
+        print(f"\n🔍 DEBUG: Message event received!")
+        print(f"   Event type: {type(event)}")
+        print(f"   Sender: {event.sender}")
+        print(f"   Room ID: {room.room_id}")
+        print(f"   Our user ID: {self.user_id}")
+        
         # Skip our own messages
         if event.sender == self.user_id:
+            print(f"   ⏭️  Skipping our own message")
             return
             
         # Skip messages that aren't text
         if not isinstance(event, RoomMessageText):
+            print(f"   ⏭️  Skipping non-text message")
             return
             
         print(f"📩 Received message from {event.sender} in {room.room_id}")
+        print(f"   Content: {event.body}")
         
         # Extract thread ID if this is a threaded message
         thread_id = None
@@ -168,7 +179,11 @@ class MatrixAdapter:
         
     async def _is_duplicate(self, event_id: str) -> bool:
         """Check if we've already processed this event."""
-        async with self.db_session as db:
+        async with self.db_session.resource(
+            "dynamodb",
+            endpoint_url=self.db_endpoint,
+            region_name=self.db_region
+        ) as db:
             table = await db.Table(self.processed_events_table)
             try:
                 response = await table.get_item(Key={"event_id": event_id})
@@ -178,7 +193,11 @@ class MatrixAdapter:
                 
     async def _store_matrix_event(self, event: MatrixEvent):
         """Store Matrix event in DynamoDB."""
-        async with self.db_session as db:
+        async with self.db_session.resource(
+            "dynamodb",
+            endpoint_url=self.db_endpoint,
+            region_name=self.db_region
+        ) as db:
             table = await db.Table(self.matrix_events_table)
             await table.put_item(Item=event.to_dynamodb())
             
@@ -202,14 +221,24 @@ class MatrixAdapter:
         )
         
         # Send to SQS with deduplication
-        response = await self.sqs_client.send_message(
-            QueueUrl=self.queue_url,
-            MessageBody=message.to_json(),
-            MessageDeduplicationId=event.event_id,
-            MessageGroupId=event.room_id  # Preserve ordering per room
-        )
+        print(f"\n📤 Sending to SQS queue...")
+        print(f"   Queue URL: {self.queue_url}")
+        print(f"   Message ID: {event.event_id}")
+        print(f"   Message Group: {event.room_id}")
+        print(f"   Message body: {message.to_json()[:200]}...")
         
-        print(f"📤 Enqueued prompt {event.event_id} -> {response['MessageId']}")
+        try:
+            response = await self.sqs_client.send_message(
+                QueueUrl=self.queue_url,
+                MessageBody=message.to_json(),
+                MessageDeduplicationId=event.event_id,
+                MessageGroupId=event.room_id  # Preserve ordering per room
+            )
+            
+            print(f"✅ Successfully enqueued prompt {event.event_id} -> {response['MessageId']}")
+        except Exception as e:
+            print(f"❌ Failed to send to SQS: {e}")
+            raise
         
     async def send_message(
         self,
@@ -273,7 +302,11 @@ class MatrixAdapter:
             
     async def mark_event_processed(self, event_id: str, response_event_id: Optional[str] = None):
         """Mark a Matrix event as processed."""
-        async with self.db_session as db:
+        async with self.db_session.resource(
+            "dynamodb",
+            endpoint_url=self.db_endpoint,
+            region_name=self.db_region
+        ) as db:
             # Update matrix_events table
             events_table = await db.Table(self.matrix_events_table)
             update_expr = "SET processed = :true"
@@ -335,17 +368,13 @@ async def create_matrix_adapter(
     if not all([homeserver_url, access_token, queue_url]):
         raise ValueError("Missing required Matrix/SQS configuration")
         
-    # Create AWS clients
+    # Create AWS session (not resource)
     session = aioboto3.Session()
-    db_session = session.resource(
-        "dynamodb",
-        endpoint_url=os.getenv("DYNAMODB_ENDPOINT"),
-        region_name=os.getenv("AWS_REGION", "us-east-1")
-    )
     
+    # Create SQS client
     sqs_client = await session.client(
         "sqs",
-        endpoint_url=os.getenv("SQS_ENDPOINT"),
+        endpoint_url=os.getenv("SQS_ENDPOINT", os.getenv("LOCALSTACK_ENDPOINT")),
         region_name=os.getenv("AWS_REGION", "us-east-1")
     ).__aenter__()
     
@@ -353,7 +382,7 @@ async def create_matrix_adapter(
     adapter = MatrixAdapter(
         homeserver_url=homeserver_url,
         access_token=access_token,
-        db_session=db_session,
+        db_session=session,  # Pass the session, not resource
         sqs_client=sqs_client,
         queue_url=queue_url,
         user_id=user_id

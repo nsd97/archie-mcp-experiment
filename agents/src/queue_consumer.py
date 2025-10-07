@@ -20,9 +20,8 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 import aioboto3
 from agents import Runner, RunContextWrapper
 
-from .agents.archie_direct import archie_direct
 import httpx
-import uuid
+from .agents.archie_with_mcp import create_archie_with_mcp
 from .context import AgentContext
 from .matrix_adapter import PromptQueueMessage, create_matrix_adapter
 
@@ -46,8 +45,8 @@ class PromptQueueConsumer:
         self.processed_table = os.getenv("PROCESSED_EVENTS_TABLE", "processed_events")
         self.matrix_adapter = None
         
-        # Concurrency control
-        self.max_concurrent_per_room = 2
+        # Concurrency control (serialize Archie per Matrix room)
+        self.max_concurrent_per_room = 1
         self.room_semaphores: Dict[str, asyncio.Semaphore] = {}
         
     async def start(self):
@@ -55,35 +54,56 @@ class PromptQueueConsumer:
         print(f"🚀 Starting prompt queue consumer")
         print(f"   Queue: {self.queue_url}")
         print(f"   DLQ: {self.dlq_url}")
-        
-        # Skip Matrix adapter for now - it's causing issues
+
+        # Skip Matrix adapter - Archie uses Matrix MCP for sending messages
+        print("ℹ️  Skipping Matrix adapter (using Matrix MCP instead)")
         self.matrix_adapter = None
-        print("⚠️ Matrix adapter disabled for debugging")
         
+        print("🔄 Starting polling loop...")
+        poll_count = 0
         while True:
             try:
+                poll_count += 1
+                print(f"\n🔄 Poll #{poll_count}")
                 await self._poll_and_process()
             except KeyboardInterrupt:
                 print("\n👋 Shutting down queue consumer")
                 break
             except Exception as e:
                 print(f"❌ Consumer error: {e}")
+                import traceback
+                traceback.print_exc()
                 await asyncio.sleep(5)  # Back off on errors
                 
     async def _poll_and_process(self):
         """Poll SQS and process messages."""
-        # Receive messages from SQS
-        response = await self.sqs_client.receive_message(
-            QueueUrl=self.queue_url,
-            MaxNumberOfMessages=10,
-            WaitTimeSeconds=20,  # Long polling
-            VisibilityTimeout=300,  # 5 minutes to process
-            MessageAttributeNames=['All']
-        )
+        print(f"\n🔍 Polling queue: {self.queue_url}")
         
-        messages = response.get('Messages', [])
-        if not messages:
-            return
+        try:
+            # Receive messages from SQS
+            print(f"   Calling receive_message with:")
+            print(f"     QueueUrl: {self.queue_url}")
+            print(f"     WaitTimeSeconds: 20")
+            print(f"     MaxNumberOfMessages: 10")
+            
+            response = await self.sqs_client.receive_message(
+                QueueUrl=self.queue_url,
+                MaxNumberOfMessages=10,
+                WaitTimeSeconds=20,  # Long polling
+                VisibilityTimeout=300,  # 5 minutes to process
+                MessageAttributeNames=['All'],
+                AttributeNames=['All']  # Include message attributes for FIFO
+            )
+            
+            messages = response.get('Messages', [])
+            print(f"📊 Received response with {len(messages)} messages")
+            
+            if not messages:
+                print("   No messages received (queue might be empty)")
+                return
+        except Exception as e:
+            print(f"❌ Error receiving messages: {e}")
+            raise
             
         print(f"📥 Received {len(messages)} messages")
         
@@ -122,9 +142,9 @@ class PromptQueueConsumer:
                 self.room_semaphores[room_id] = asyncio.Semaphore(
                     self.max_concurrent_per_room
                 )
-                
+
             async with self.room_semaphores[room_id]:
-                print(f"🤖 Processing prompt from {prompt_msg.sender} in {room_id}")
+                print(f"🤖 Processing prompt from {prompt_msg.sender} in {room_id} (serialized)")
                 await self._invoke_agent(prompt_msg)
                 
             # Mark as processed
@@ -145,7 +165,6 @@ class PromptQueueConsumer:
     async def _invoke_agent(self, prompt_msg: PromptQueueMessage):
         """Invoke Archie agent with the prompt."""
         # Create agent context
-        import httpx
         backend_client = httpx.AsyncClient(
             base_url=self.backend_url,
             timeout=30.0
@@ -160,36 +179,38 @@ class PromptQueueConsumer:
             backend_client=backend_client,
             matrix_client=self.matrix_adapter
         )
-        
+
         try:
-            # Run Archie with the user's message
-            print(f"🤖 Running Archie agent...")
-            result = await Runner.run(
-                archie_direct,
-                prompt_msg.content,
-                context=context,
-                max_turns=3
-            )
-            
-            print(f"✅ Agent completed: {result.final_output[:100]}...")
-            
-            # Send response to Matrix directly
-            await self._send_matrix_response(
-                prompt_msg.room_id,
-                result.final_output
-            )
-            
-            # Mark the original event as processed
+            archie_agent, matrix_mcp_server = await create_archie_with_mcp()
+
+            print("🤖 Running Archie agent with MCP...")
+            try:
+                async with matrix_mcp_server:
+                    # Add timeout to prevent hanging
+                    result = await asyncio.wait_for(
+                        Runner.run(
+                            archie_agent,
+                            prompt_msg.content,
+                            context=context,
+                            max_turns=3
+                        ),
+                        timeout=120.0  # 2 minute timeout
+                    )
+
+                print(f"✅ Agent completed: {result.final_output[:100]}...")
+            except asyncio.TimeoutError:
+                print(f"⏱️  Agent timed out after 120 seconds")
+                raise Exception("Agent execution timed out")
+
             if self.matrix_adapter:
                 await self.matrix_adapter.mark_event_processed(
                     prompt_msg.correlation_id
                 )
         finally:
             await backend_client.aclose()
-            
+
     async def _is_duplicate(self, event_id: str) -> bool:
         """Check if we've already processed this event."""
-        # db_session is already the resource, not a context manager
         table = await self.db_session.Table(self.processed_table)
         try:
             response = await table.get_item(Key={"event_id": event_id})
@@ -197,35 +218,6 @@ class PromptQueueConsumer:
         except Exception:
             return False
                 
-    async def _send_matrix_response(self, room_id: str, content: str):
-        """Send response directly to Matrix room."""
-        homeserver = os.getenv("MATRIX_HOMESERVER_URL", "http://matrix-synapse:8008")
-        access_token = os.getenv("MATRIX_ACCESS_TOKEN")
-        
-        if not access_token:
-            print("❌ No Matrix access token configured")
-            return
-            
-        async with httpx.AsyncClient() as client:
-            try:
-                txn_id = str(uuid.uuid4())
-                response = await client.put(
-                    f"{homeserver}/_matrix/client/r0/rooms/{room_id}/send/m.room.message/{txn_id}",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                    json={
-                        "msgtype": "m.text",
-                        "body": content
-                    }
-                )
-                
-                if response.status_code == 200:
-                    print(f"✅ Sent Matrix reply to {room_id}")
-                else:
-                    print(f"❌ Failed to send Matrix reply: {response.status_code}")
-                    
-            except Exception as e:
-                print(f"❌ Error sending Matrix reply: {e}")
-    
     async def _mark_processed(self, event_id: str):
         """Mark an event as processed."""
         # db_session is already the resource, not a context manager
@@ -337,10 +329,21 @@ async def run_worker():
     # Enter the context to get the actual resource
     db_session = await db_resource.__aenter__()
     
+    # Configure boto3 to reduce retries and show actual errors
+    from botocore.config import Config
+    
+    config = Config(
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+        retries={
+            'max_attempts': 1,  # Reduce retries to see actual errors faster
+            'mode': 'standard'
+        }
+    )
+    
     sqs_client = await session.client(
         "sqs",
         endpoint_url=endpoint_url,
-        region_name=os.getenv("AWS_REGION", "us-east-1"),
+        config=config,
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test")
     ).__aenter__()

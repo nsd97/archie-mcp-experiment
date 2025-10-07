@@ -4,10 +4,14 @@ import os
 import sys
 
 # Add vendored SDK to path
-sys.path.insert(0, "/app/external/openai-agents-python/src")
+vendored_sdk_path = os.getenv("VENDORED_SDK_PATH", "/app/external/openai-agents-python/src")
+if os.path.exists(vendored_sdk_path):
+    sys.path.insert(0, vendored_sdk_path)
+else:
+    raise RuntimeError(f"Vendored SDK not found at {vendored_sdk_path}")
 
 from agents import Agent
-from agents.model_settings import ModelSettings
+from agents.model_settings import ModelSettings  # pyright: ignore[reportMissingImports]
 
 # Import our tools - but we'll override Matrix sending
 from src.tools.status import get_task_status

@@ -4,9 +4,28 @@ Following SDK patterns from external/openai-agents-python/docs/agents.md
 and external/openai-agents-python/docs/mcp.md
 """
 
+import logging
 import os
 import sys
-sys.path.insert(0, "/app/external/openai-agents-python/src")
+from typing import Tuple
+
+# Add vendored SDK to path for local development parity with Docker image.
+vendored_sdk_path = os.getenv("VENDORED_SDK_PATH", "/app/external/openai-agents-python/src")
+# Try to find the SDK in multiple locations
+possible_paths = [
+    vendored_sdk_path,
+    os.path.join(os.path.dirname(__file__), "../../../external/openai-agents-python/src"),
+    os.path.join(os.getcwd(), "external/openai-agents-python/src"),
+]
+sdk_found = False
+for path in possible_paths:
+    if os.path.exists(path):
+        sys.path.insert(0, os.path.abspath(path))
+        sdk_found = True
+        break
+if not sdk_found:
+    # Try importing without path modification (for when package is installed)
+    pass
 
 from agents import Agent
 from agents.mcp import MCPServerStreamableHttp
@@ -14,39 +33,63 @@ from agents.extensions.handoff_prompt import (  # pyright: ignore[reportMissingI
     RECOMMENDED_PROMPT_PREFIX,
 )
 
+from src.logging_config import get_logger, log_call, logging_context
+
 # Import tools
 from src.tools.status import get_task_status
 from src.tools.queues import enqueue_for_lauren
 
+logger = get_logger(__name__)
 
-async def create_archie_with_mcp():
+
+@log_call(level=logging.DEBUG)
+async def create_archie_with_mcp() -> Tuple[Agent, MCPServerStreamableHttp]:
     """Create Archie agent with Matrix MCP server integration."""
-    
-    # Matrix MCP server configuration
-    matrix_mcp_url = os.getenv("MATRIX_MCP_URL", "http://matrix-mcp-server:3001/mcp")
-    matrix_user_id = os.getenv("MATRIX_USER_ID", "@archie:localhost")
-    matrix_homeserver_url = os.getenv("MATRIX_HOMESERVER_URL", "http://matrix-synapse:8008")
-    matrix_access_token = os.getenv("MATRIX_ACCESS_TOKEN", "")
-    
-    # Create MCP server connection
-    matrix_mcp_server = MCPServerStreamableHttp(
-        name="Matrix MCP Server",
-        params={
-            "url": matrix_mcp_url,
-            "headers": {
-                "matrix_user_id": matrix_user_id,
-                "matrix_homeserver_url": matrix_homeserver_url,
-                "matrix_access_token": matrix_access_token,
+
+    matrix_mcp_server: MCPServerStreamableHttp | None = None
+
+    try:
+        # Matrix MCP server configuration
+        matrix_mcp_url = os.getenv("MATRIX_MCP_URL", "http://matrix-mcp-server:3001/mcp")
+        matrix_user_id = os.getenv("MATRIX_USER_ID", "@archie:localhost")
+        matrix_homeserver_url = os.getenv("MATRIX_HOMESERVER_URL", "http://matrix-synapse:8008")
+        matrix_access_token = os.getenv("MATRIX_ACCESS_TOKEN")
+        if not matrix_access_token:
+            logger.error("Matrix access token missing; cannot initialize MCP server")
+            raise ValueError("MATRIX_ACCESS_TOKEN environment variable is required")
+
+        with logging_context(
+            component="archie_with_mcp",
+            mcp_url=matrix_mcp_url,
+            matrix_user=matrix_user_id,
+        ):
+            logger.debug(
+                "Resolved Matrix MCP configuration",
+                extra={
+                    "homeserver": matrix_homeserver_url,
+                    "token_len": len(matrix_access_token or ""),
+                },
+            )
+
+        # Create MCP server connection
+        matrix_mcp_server = MCPServerStreamableHttp(
+            name="Matrix MCP Server",
+            params={
+                "url": matrix_mcp_url,
+                "headers": {
+                    "matrix_user_id": matrix_user_id,
+                    "matrix_homeserver_url": matrix_homeserver_url,
+                    "matrix_access_token": matrix_access_token,
+                },
             },
-        },
-        cache_tools_list=True,
-        max_retry_attempts=3,
-    )
-    
-    # Agent definition with MCP server
-    archie_agent = Agent(
-        name="Archie",
-        instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
+            cache_tools_list=True,
+            max_retry_attempts=3,
+        )
+
+        # Agent definition with MCP server
+        archie_agent = Agent(
+            name="Archie",
+            instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
         
 You are Archie, the helpful operations assistant for ArchieOS real estate management system.
 
@@ -103,10 +146,25 @@ Important workflow:
 3. You'll get Lauren's completion signal later on the Archie Signal Queue (separate consumer)
 
 Remember: You're the friendly interface. Keep users informed using the Matrix MCP tools!""",
-        model="gpt-5",
-        tools=[get_task_status, enqueue_for_lauren],
-        mcp_servers=[matrix_mcp_server],
-        handoffs=[],  # No direct handoffs - using queues for async communication
-    )
-    
-    return archie_agent, matrix_mcp_server
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),  # Use env var with fallback
+            tools=[get_task_status, enqueue_for_lauren],
+            mcp_servers=[matrix_mcp_server],
+            handoffs=[],  # No direct handoffs - using queues for async communication
+        )
+        logger.info("Archie MCP agent ready", extra={"tools": len(archie_agent.tools)})
+
+        return archie_agent, matrix_mcp_server
+
+    except Exception as e:
+        if matrix_mcp_server is not None:
+            try:
+                await matrix_mcp_server.cleanup()
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Cleanup after MCP initialization failure also failed",
+                    extra={"cleanup_error": str(cleanup_error)},
+                )
+
+        raise RuntimeError(
+            "Failed to create Archie agent with Matrix MCP integration"
+        ) from e

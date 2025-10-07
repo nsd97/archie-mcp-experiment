@@ -4,22 +4,22 @@ Following SDK patterns from external/openai-agents-python/docs/tools.md
 """
 
 import os
-import sys
 import json
 import asyncio
 from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
 
-sys.path.insert(0, "/app/external/openai-agents-python/src")
-
 from agents import function_tool, RunContextWrapper
 
 from src.context import AgentContext, MessageSentResponse
+from src.logging_config import get_logger
 
 
 # Global Matrix adapter instance (initialized on first use)
 _matrix_adapter = None
+
+logger = get_logger(__name__)
 
 
 async def _get_matrix_adapter():
@@ -84,6 +84,15 @@ async def send_matrix_message(
         
         # Log the message send
         print(f"📤 Sent Matrix message {result['event_id']} to {room_id}")
+        logger.info(
+            "Matrix message sent",
+            extra={
+                "room_id": room_id,
+                "thread_id": thread_id or context.thread_id,
+                "event_id": result.get('event_id'),
+                "format": format,
+            },
+        )
         
         # Update rate limit tracking
         await _update_rate_limit(context, room_id)
@@ -106,10 +115,14 @@ async def send_matrix_message(
     except Exception as e:
         # Log error but don't expose internal details to user
         print(f"❌ Failed to send Matrix message: {str(e)}")
-        raise Exception(f"Failed to send message to Matrix: {str(e)}")
-
-
-# Rate limiting helpers
+        logger.exception(
+            "Failed to send Matrix message",
+            extra={
+                "room_id": room_id,
+                "thread_id": thread_id or context.thread_id,
+            },
+        )
+        raise Exception(f"Failed to send message to Matrix: {str(e)}") from e
 
 async def _check_rate_limit(context: AgentContext, room_id: str) -> bool:
     """Check if we're within rate limits for the room.

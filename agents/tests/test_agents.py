@@ -4,8 +4,12 @@ import sys
 import os
 
 # Add the src directory to Python path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, "/app/external/openai-agents-python/src")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+VENDORED_SDK = os.path.join(PROJECT_ROOT, "external", "openai-agents-python", "src")
+if VENDORED_SDK not in sys.path:
+    sys.path.insert(0, VENDORED_SDK)
 
 import pytest
 from src.agents.archie import archie_agent

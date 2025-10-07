@@ -20,9 +20,12 @@ from agents import set_tracing_export_api_key
 from .agents.archie import archie_agent
 from .agents.lauren import lauren_agent
 from .context import AgentContext
+from .logging_config import get_logger, logging_context
 
 # Load environment variables
 load_dotenv()
+
+logger = get_logger(__name__)
 
 # Metrics
 agent_invocations = Counter(
@@ -46,18 +49,21 @@ backend_client = None
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     """Manage application lifecycle."""
     global db_session, backend_client
-    
-    # Initialize resources
-    print("Starting ArchieOS Agent Service...")
-    
+
+    with logging_context(component="lifespan", phase="startup"):
+        logger.info("Starting ArchieOS Agent Service startup sequence")
+    print("Starting ArchieOS Agent Service startup sequence")
+
     # Set up SDK tracing
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key:
         set_tracing_export_api_key(api_key)
-        print("✓ OpenAI tracing enabled")
+        logger.info("Tracing export enabled via OpenAI SDK")
+        print("Tracing export enabled via OpenAI SDK")
     else:
-        print("⚠ OpenAI API key not found, tracing disabled")
-    
+        logger.warning("OpenAI API key not found; tracing export remains disabled")
+        print("⚠ OpenAI API key not found; tracing export remains disabled")
+
     # Initialize DynamoDB session
     session = aioboto3.Session()
     endpoint_url = os.getenv("DYNAMODB_ENDPOINT")
@@ -70,13 +76,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test")
         )
+        logger.debug("Initialized DynamoDB session for LocalStack", extra={"endpoint": endpoint_url})
+        print(f"✓ Initialized DynamoDB session for LocalStack (endpoint={endpoint_url})")
     else:
         # Production AWS
         db_session = session.resource(
             "dynamodb",
             region_name=os.getenv("AWS_REGION", "us-east-1")
         )
-    
+        logger.debug("Initialized DynamoDB session for AWS", extra={"region": os.getenv("AWS_REGION", "us-east-1")})
+        print("✓ Initialized DynamoDB session for AWS")
+
     # Initialize backend HTTP client
     backend_url = os.getenv("BACKEND_URL", "http://localhost:3000")
     backend_client = httpx.AsyncClient(
@@ -87,20 +97,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             "X-Service": "agents"
         }
     )
-    
-    print(f"✓ Connected to backend at {backend_url}")
-    print(f"✓ DynamoDB endpoint: {endpoint_url or 'AWS'}")
-    
+
+    logger.info(
+        "Backend client configured",
+        extra={"base_url": backend_url, "timeout": 30.0},
+    )
+    print(f"✓ Backend client configured (url={backend_url})")
+    logger.info(
+        "DynamoDB target resolved",
+        extra={"endpoint": endpoint_url or "aws", "region": os.getenv("AWS_REGION", "us-east-1")},
+    )
+    print(f"✓ DynamoDB target resolved (endpoint={endpoint_url or 'aws'})")
+
     # Verify agents are loaded
-    print(f"✓ Archie agent loaded: {archie_agent.name}")
-    print(f"✓ Lauren agent loaded: {lauren_agent.name}")
-    
-    yield
-    
-    # Cleanup
-    await backend_client.aclose()
-    await db_session.__aexit__(None, None, None)
-    print("Agent service shutdown complete")
+    logger.debug("Agent instances ready", extra={"archie": archie_agent.name, "lauren": lauren_agent.name})
+    print(f"✓ Agents loaded: Archie={archie_agent.name}, Lauren={lauren_agent.name}")
+
+    try:
+        yield
+    finally:
+        with logging_context(component="lifespan", phase="shutdown"):
+            logger.info("Shutting down ArchieOS Agent Service")
+        print("Shutting down ArchieOS Agent Service")
+        await backend_client.aclose()
+        await db_session.__aexit__(None, None, None)
+        logger.info("Agent service shutdown complete")
+        print("Agent service shutdown complete")
 
 
 # Create FastAPI app
@@ -211,11 +233,13 @@ async def list_agents():
 async def global_exception_handler(request, exc):
     """Handle uncaught exceptions."""
     import traceback
-    
     error_id = os.urandom(8).hex()
+    with logging_context(error_id=error_id, path=getattr(request, "url", "unknown")):
+        logger.exception("Unhandled application error: %s", exc)
+        logger.debug("Traceback details", extra={"trace": traceback.format_exc()})
     print(f"Error {error_id}: {exc}")
     print(traceback.format_exc())
-    
+
     return JSONResponse(
         status_code=500,
         content={

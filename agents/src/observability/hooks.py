@@ -20,6 +20,10 @@ from agents import (
 )
 from agents.items import ModelResponse, TResponseInputItem
 
+from src.logging_config import get_logger, logging_context, log_call
+
+logger = get_logger(__name__)
+
 # Prometheus metrics (if available)
 try:
     from prometheus_client import Counter, Histogram, Gauge
@@ -75,6 +79,7 @@ try:
     METRICS_AVAILABLE = True
 except ImportError:
     METRICS_AVAILABLE = False
+    logger.warning("Prometheus metrics module not available; metrics disabled")
     print("⚠️  Prometheus metrics not available")
 
 
@@ -96,9 +101,13 @@ class ObservabilityHooks(AgentHooks[Any]):
     ) -> None:
         """Called when agent starts processing."""
         self.start_time = time.time()
-        
+        with logging_context(agent=self.agent_name):
+            logger.info(
+                "Agent execution starting",
+                extra={"usage": context.usage.to_dict() if hasattr(context.usage, "to_dict") else None},
+            )
         print(f"🤖 [{self.agent_name}] Starting agent execution")
-        
+
         if METRICS_AVAILABLE:
             active_agents.inc()
             
@@ -111,6 +120,15 @@ class ObservabilityHooks(AgentHooks[Any]):
         """Called when agent finishes processing."""
         if self.start_time:
             duration = time.time() - self.start_time
+            with logging_context(agent=self.agent_name):
+                logger.info(
+                    "Agent execution completed",
+                    extra={
+                        "duration": round(duration, 2),
+                        "usage": context.usage.to_dict() if hasattr(context.usage, "to_dict") else None,
+                        "output_preview": str(output)[:256],
+                    },
+                )
             print(f"✅ [{self.agent_name}] Completed in {duration:.2f}s")
             
             if METRICS_AVAILABLE:
@@ -121,6 +139,8 @@ class ObservabilityHooks(AgentHooks[Any]):
                 agent_duration.labels(agent_name=self.agent_name).observe(duration)
                 active_agents.dec()
         else:
+            with logging_context(agent=self.agent_name):
+                logger.info("Agent execution completed without duration timing")
             print(f"✅ [{self.agent_name}] Completed")
             
     async def on_handoff(
@@ -130,6 +150,8 @@ class ObservabilityHooks(AgentHooks[Any]):
         source: Agent[Any]
     ) -> None:
         """Called when handoff occurs."""
+        with logging_context(agent=self.agent_name, source_agent=source.name):
+            logger.debug("Handoff received from source agent")
         print(f"↔️  [{self.agent_name}] Received handoff from {source.name}")
         
         if METRICS_AVAILABLE:
@@ -146,6 +168,8 @@ class ObservabilityHooks(AgentHooks[Any]):
     ) -> None:
         """Called when tool execution starts."""
         self.tool_times[tool.name] = time.time()
+        with logging_context(agent=self.agent_name, tool=tool.name):
+            logger.debug("Tool execution starting")
         print(f"🔧 [{self.agent_name}] Starting tool: {tool.name}")
         
     async def on_tool_end(
@@ -160,6 +184,11 @@ class ObservabilityHooks(AgentHooks[Any]):
         if tool_name in self.tool_times:
             duration = time.time() - self.tool_times[tool_name]
             result_preview = result[:100] + "..." if len(result) > 100 else result
+            with logging_context(agent=self.agent_name, tool=tool_name):
+                logger.info(
+                    "Tool completed",
+                    extra={"duration": round(duration, 2), "result_preview": result_preview},
+                )
             print(f"✓ [{self.agent_name}] Tool {tool_name} completed in {duration:.2f}s: {result_preview}")
             
             if METRICS_AVAILABLE:
@@ -173,6 +202,8 @@ class ObservabilityHooks(AgentHooks[Any]):
                     tool_name=tool_name
                 ).observe(duration)
         else:
+            with logging_context(agent=self.agent_name, tool=tool_name):
+                logger.info("Tool completed without timing data")
             print(f"✓ [{self.agent_name}] Tool {tool_name} completed")
 
 
@@ -218,6 +249,11 @@ class RunObservabilityHooks(RunHooks):
         """Called when entire run starts."""
         self.run_start_time = time.time()
         self.event_counter = 0
+        with logging_context(component="run", phase="start"):
+            logger.info(
+                "Run started",
+                extra={"timestamp": datetime.utcnow().isoformat()},
+            )
         print(f"\n{'='*60}")
         print(f"🚀 Run started at {datetime.utcnow().isoformat()}")
         print(f"{'='*60}\n")
@@ -230,6 +266,16 @@ class RunObservabilityHooks(RunHooks):
         """Called when entire run ends."""
         if self.run_start_time:
             duration = time.time() - self.run_start_time
+            with logging_context(component="run", phase="end"):
+                logger.info(
+                    "Run completed",
+                    extra={
+                        "duration": round(duration, 2),
+                        "events": self.event_counter,
+                        "usage": self._usage_to_str(context.usage),
+                        "output_preview": str(output)[:256],
+                    },
+                )
             print(f"\n{'='*60}")
             print(f"✅ Run completed in {duration:.2f}s")
             print(f"   Total events: {self.event_counter}")
@@ -243,6 +289,11 @@ class RunObservabilityHooks(RunHooks):
     ) -> None:
         """Called when any agent starts."""
         self.event_counter += 1
+        with logging_context(agent=agent.name, event=self.event_counter):
+            logger.debug(
+                "Agent started during run",
+                extra={"usage": self._usage_to_str(context.usage)},
+            )
         print(f"#{self.event_counter} Agent [{agent.name}] started")
         print(f"   Usage so far: {self._usage_to_str(context.usage)}")
         
@@ -254,6 +305,11 @@ class RunObservabilityHooks(RunHooks):
     ) -> None:
         """Called when any agent ends."""
         self.event_counter += 1
+        with logging_context(agent=agent.name, event=self.event_counter):
+            logger.debug(
+                "Agent completed during run",
+                extra={"usage": self._usage_to_str(context.usage), "output_preview": str(output)[:256]},
+            )
         print(f"#{self.event_counter} Agent [{agent.name}] ended")
         print(f"   Usage: {self._usage_to_str(context.usage)}")
         
@@ -269,6 +325,14 @@ class RunObservabilityHooks(RunHooks):
     ) -> None:
         """Called when LLM request starts."""
         self.event_counter += 1
+        with logging_context(agent=agent.name, event=self.event_counter):
+            logger.debug(
+                "LLM request started",
+                extra={
+                    "system_prompt_len": len(system_prompt or ""),
+                    "input_items": len(input_items),
+                },
+            )
         print(f"#{self.event_counter} LLM request started for [{agent.name}]")
         
         if METRICS_AVAILABLE:
@@ -285,6 +349,14 @@ class RunObservabilityHooks(RunHooks):
     ) -> None:
         """Called when LLM request ends."""
         self.event_counter += 1
+        with logging_context(agent=agent.name, event=self.event_counter):
+            logger.debug(
+                "LLM request completed",
+                extra={
+                    "usage": self._usage_to_str(context.usage),
+                    "response_preview": str(response.output)[:256] if hasattr(response, "output") else None,
+                },
+            )
         print(f"#{self.event_counter} LLM request completed for [{agent.name}]")
         print(f"   Usage: {self._usage_to_str(context.usage)}")
         
@@ -297,6 +369,11 @@ class RunObservabilityHooks(RunHooks):
         """Called when tool execution starts."""
         self.event_counter += 1
         tool_args = getattr(context, 'tool_arguments', 'N/A')
+        with logging_context(agent=agent.name, tool=tool.name, event=self.event_counter):
+            logger.debug(
+                "Tool started during run",
+                extra={"args_preview": str(tool_args)[:256]},
+            )
         print(f"#{self.event_counter} Tool [{tool.name}] started")
         print(f"   Args: {tool_args}")
         
@@ -310,6 +387,11 @@ class RunObservabilityHooks(RunHooks):
         """Called when tool execution ends."""
         self.event_counter += 1
         result_preview = result[:100] + "..." if len(result) > 100 else result
+        with logging_context(agent=agent.name, tool=tool.name, event=self.event_counter):
+            logger.debug(
+                "Tool completed during run",
+                extra={"result_preview": result_preview},
+            )
         print(f"#{self.event_counter} Tool [{tool.name}] completed")
         print(f"   Result: {result_preview}")
 
@@ -324,4 +406,3 @@ def create_agent_hooks(agent_name: str) -> ObservabilityHooks:
 def create_run_hooks() -> RunObservabilityHooks:
     """Create observability hooks for a run."""
     return RunObservabilityHooks()
-

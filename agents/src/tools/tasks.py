@@ -17,11 +17,10 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 from agents import function_tool, RunContextWrapper
 
 from src.context import AgentContext, Task
-from .queues import notify_archie_signal
+from .queues import notify_archie_signal_impl
 
 
-@function_tool
-async def classify_and_create_task(
+async def _classify_and_create_task_impl(
     ctx: RunContextWrapper[AgentContext],
     raw_text: str,
     attachments: Optional[list[dict]] = None,
@@ -68,7 +67,7 @@ async def classify_and_create_task(
         "task_def_id": task_def_id,
         "name": _get_task_name_from_catalog(task_def_id),
         "inputs": extracted_inputs,
-        "priority": priority_hint or 5,
+        "priority": priority_hint if priority_hint is not None else 5,
         "status": "OPEN",  # Always OPEN for admin to claim
         "claim_status": "UNCLAIMED",  # Always UNCLAIMED
         "assigned_to": None,  # Never pre-assign
@@ -108,7 +107,7 @@ async def classify_and_create_task(
         print(f"✅ Lauren created task: {task.task_id} ({task.name}) - OPEN/UNCLAIMED")
         
         # Step 5: Signal Archie about successful creation
-        await notify_archie_signal(
+        await notify_archie_signal_impl(
             ctx,
             kind="created",
             task_id=task.task_id,
@@ -129,7 +128,7 @@ async def classify_and_create_task(
         print(f"❌ Lauren failed to create task: {e}")
         
         # Signal error to Archie
-        await notify_archie_signal(
+        await notify_archie_signal_impl(
             ctx,
             kind="error",
             message=f"Failed to create task: {str(e)}",
@@ -139,8 +138,7 @@ async def classify_and_create_task(
         raise Exception(f"Failed to create task: {str(e)}")
 
 
-@function_tool
-async def create_task(
+async def _create_task_impl(
     ctx: RunContextWrapper[AgentContext],
     listing_id: Optional[str],
     task_def_id: str,
@@ -216,7 +214,7 @@ async def create_task(
         print(f"✅ Lauren created task: {task.task_id} - OPEN/UNCLAIMED")
         
         # Signal Archie
-        await notify_archie_signal(
+        await notify_archie_signal_impl(
             ctx,
             kind="created",
             task_id=task.task_id,
@@ -229,7 +227,7 @@ async def create_task(
         return task
         
     except Exception as e:
-        await notify_archie_signal(
+        await notify_archie_signal_impl(
             ctx,
             kind="error",
             message=f"Failed to create task: {str(e)}",
@@ -272,7 +270,7 @@ async def _classify_admin_intent(
             "location_notes": raw_text
         })
         
-    if any(word in text_lower for word in ["mls", "listing", "post", "publish"]):
+    if any(word in text_lower for word in ["mls", "post to mls", "publish listing"]):
         return ("SALE::POST_TO_MLS@v1", {
             "listing_notes": raw_text
         })
@@ -351,11 +349,11 @@ def _parse_due_date(due_hint: str) -> str:
         return due_hint + "T00:00:00Z" if "T" not in due_hint else due_hint
         
     # Simple parsing for common phrases
-    from datetime import timedelta
-    now = datetime.utcnow()
-    
+    from datetime import timedelta, timezone
+
     hint_lower = due_hint.lower()
-    
+    now = datetime.now(timezone.utc)
+
     if "tomorrow" in hint_lower:
         date = now + timedelta(days=1)
     elif "next week" in hint_lower:
@@ -392,6 +390,11 @@ async def _validate_task_catalog(
         for field in required:
             if field not in inputs:
                 return False
-                
+
     # Default to valid for unknown types (be permissive)
     return True
+
+
+# Export tools for agent use
+classify_and_create_task = function_tool(_classify_and_create_task_impl, strict_mode=False)
+create_task = function_tool(_create_task_impl, strict_mode=False)

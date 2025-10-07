@@ -13,7 +13,13 @@ import traceback
 from datetime import datetime
 from typing import Any, Dict
 
-sys.path.insert(0, "/app/external/openai-agents-python/src")
+sys.path.insert(
+    0,
+    os.getenv(
+        "OPENAI_AGENTS_SDK_PATH",
+        os.path.join(os.path.dirname(__file__), "../external/openai-agents-python/src"),
+    ),
+)
 
 import aioboto3  # pyright: ignore[reportMissingImports]
 import httpx  # pyright: ignore[reportMissingImports]
@@ -22,6 +28,9 @@ from agents import Runner
 from .agents.lauren import lauren_agent
 from .context import AgentContext
 from .observability.hooks import RunObservabilityHooks
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class LaurenWorkConsumer:
@@ -52,16 +61,26 @@ class LaurenWorkConsumer:
         print(f"   Queue: {self.queue_url}")
         print(f"   DLQ: {self.dlq_url}")
         print(f"   Concurrency: {self.max_concurrent}")
+        logger.info(
+            "Lauren consumer starting",
+            extra={
+                "queue_url": self.queue_url,
+                "dlq_url": self.dlq_url,
+                "max_concurrent": self.max_concurrent,
+            },
+        )
         
         while True:
             try:
                 await self._poll_and_process()
             except KeyboardInterrupt:
                 print("\n👋 Shutting down Lauren consumer")
+                logger.info("Lauren consumer received shutdown signal")
                 break
             except Exception as e:
                 print(f"❌ Consumer error: {e}")
                 traceback.print_exc()
+                logger.exception("Lauren consumer loop error: %s", e)
                 await asyncio.sleep(5)  # Back off on errors
                 
     async def _poll_and_process(self):
@@ -74,12 +93,16 @@ class LaurenWorkConsumer:
             VisibilityTimeout=300,  # 5 minutes to process
             MessageAttributeNames=['All']
         )
-        
+
         messages = response.get('Messages', [])
         if not messages:
             return
-            
+        
         print(f"📥 Lauren received {len(messages)} work items")
+        logger.debug(
+            "SQS poll returned messages",
+            extra={"count": len(messages)},
+        )
         
         # Process messages with concurrency control
         tasks = []
@@ -94,8 +117,16 @@ class LaurenWorkConsumer:
         for i, (message, result) in enumerate(zip(messages, results)):
             if not isinstance(result, Exception):
                 await self._delete_message(message)
+                logger.debug("Deleted processed message", extra={"message_id": message.get('MessageId')})
             else:
                 print(f"⚠️  Failed to process message: {result}")
+                logger.warning(
+                    "Work item processing failed",
+                    extra={
+                        "message_id": message.get('MessageId'),
+                        "error": str(result),
+                    },
+                )
                 # Message will return to queue after visibility timeout
                 
     async def _process_work_item(self, sqs_message: Dict[str, Any]):
@@ -115,25 +146,43 @@ class LaurenWorkConsumer:
                 # Check for duplicate processing
                 if await self._is_duplicate(correlation_id):
                     print(f"⏭️  Skipping duplicate {correlation_id}")
+                    logger.info("Duplicate work item skipped", extra={"correlation_id": correlation_id})
                     return True
                     
                 print(f"🤖 Lauren processing: {raw_text[:50]}...")
+                logger.info(
+                    "Processing work item",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "room_id": room_id,
+                        "thread_id": thread_id,
+                    },
+                )
                 
                 # Invoke Lauren agent
                 await self._invoke_lauren(body)
                 
                 # Mark as processed
                 await self._mark_processed(correlation_id)
+                logger.info("Marked work item processed", extra={"correlation_id": correlation_id})
                 return True
-                
+
             except Exception as e:
                 print(f"❌ Error processing work item: {e}")
                 traceback.print_exc()
+                logger.exception("Error processing work item: %s", e)
                 
                 # Check if we should send to DLQ
                 receive_count = int(sqs_message.get('Attributes', {}).get('ApproximateReceiveCount', 0))
                 if receive_count >= 5:
                     await self._send_to_dlq(sqs_message, str(e))
+                    logger.error(
+                        "Work item sent to DLQ",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "receive_count": receive_count,
+                        },
+                    )
                     
                 raise
                 
@@ -147,7 +196,7 @@ class LaurenWorkConsumer:
             base_url=self.backend_url,
             timeout=30.0
         )
-        
+
         # Build agent context
         context = AgentContext(
             user_id=work_message.get("sender", "unknown"),
@@ -182,12 +231,20 @@ Classify this request and create an OPEN/UNCLAIMED task for the admin team."""
             )
             
             print(f"✅ Lauren completed: {result.final_output}")
+            logger.info(
+                "Lauren run completed",
+                extra={
+                    "correlation_id": context.correlation_id,
+                    "final_output": str(result.final_output)[:256],
+                },
+            )
             
             # Lauren's tools will have called notify_archie_signal
             # No need to do anything else here
             
         finally:
             await backend_client.aclose()
+            logger.debug("Closed backend client for Lauren invocation")
             
     async def _is_duplicate(self, correlation_id: str) -> bool:
         """Check if we've already processed this work item."""

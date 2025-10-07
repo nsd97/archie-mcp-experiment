@@ -5,15 +5,19 @@ import os
 import json
 from unittest.mock import AsyncMock, Mock, patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, "/app/external/openai-agents-python/src")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+VENDORED_SDK = os.path.join(PROJECT_ROOT, "external", "openai-agents-python", "src")
+if VENDORED_SDK not in sys.path:
+    sys.path.insert(0, VENDORED_SDK)
 
 import pytest
 from httpx import Response
 from agents import RunContextWrapper
 
 from src.context import AgentContext, TaskStatusResponse
-from tools.status import get_task_status, _generate_listing_summary, _generate_queue_summary
+from src.tools.status import _get_task_status_impl, _generate_listing_summary, _generate_queue_summary
 
 
 @pytest.fixture
@@ -63,7 +67,7 @@ async def test_get_task_status_for_listing(mock_context):
     mock_context.context.backend_client.get.return_value = mock_response
     
     # Call the tool
-    result = await get_task_status(
+    result = await _get_task_status_impl(
         mock_context,
         listing_id="listing-123",
         limit=10
@@ -114,7 +118,7 @@ async def test_get_task_status_global_queue(mock_context):
     mock_context.context.backend_client.get.return_value = mock_response
     
     # Call the tool
-    result = await get_task_status(mock_context)
+    result = await _get_task_status_impl(mock_context)
     
     # Verify the result
     assert isinstance(result, TaskStatusResponse)
@@ -141,7 +145,7 @@ async def test_get_task_status_with_filters(mock_context):
     mock_context.context.backend_client.get.return_value = mock_response
     
     # Call with filters
-    result = await get_task_status(
+    result = await _get_task_status_impl(
         mock_context,
         status="OPEN",
         assignee="user-123",
@@ -166,7 +170,7 @@ async def test_get_task_status_error_handling(mock_context):
     mock_context.context.backend_client.get.side_effect = Exception("Backend error")
     
     # Call should not raise, but return error summary
-    result = await get_task_status(mock_context)
+    result = await _get_task_status_impl(mock_context)
     
     assert isinstance(result, TaskStatusResponse)
     assert "Error fetching task status" in result.summary

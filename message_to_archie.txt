@@ -1,0 +1,1 @@
+Tell Archie that we have successfully set up the Matrix listener to receive your messages and put them in the queue! The messages are waiting for him to process. Ask him about open tasks when he's ready.

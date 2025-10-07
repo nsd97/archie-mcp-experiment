@@ -12,10 +12,12 @@ sys.path.insert(0, "/app/external/openai-agents-python/src")
 from agents import function_tool, RunContextWrapper
 
 from src.context import AgentContext, TaskStatusResponse
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
-@function_tool
-async def get_task_status(
+async def _get_task_status_impl(
     ctx: RunContextWrapper[AgentContext],
     listing_id: Optional[str] = None,
     status: Optional[str] = None,
@@ -38,6 +40,17 @@ async def get_task_status(
         TaskStatusResponse with summary and task items
     """
     context = ctx.context
+    logger.debug(
+        "get_task_status called",
+        extra={
+            "listing_id": listing_id,
+            "status": status,
+            "assignee": assignee,
+            "limit": limit,
+            "page_token": page_token,
+            "correlation_id": context.correlation_id,
+        },
+    )
     
     # Build query parameters
     params = {}
@@ -101,14 +114,16 @@ async def get_task_status(
                 
         paginated_tasks = tasks[start_idx:start_idx + limit]
         next_page_token = str(start_idx + limit) if start_idx + limit < len(tasks) else None
-        
-        return TaskStatusResponse(
+
+        response_payload = TaskStatusResponse(
             summary=summary,
             items=paginated_tasks,
             next_page_token=next_page_token,
             total_count=total_count
         )
-        
+
+        return response_payload
+
     except Exception as e:
         # Return error summary
         return TaskStatusResponse(
@@ -116,6 +131,10 @@ async def get_task_status(
             items=[],
             total_count=0
         )
+
+
+# Export tool for agent use
+get_task_status = function_tool(_get_task_status_impl, strict_mode=False)
 
 
 def _generate_listing_summary(listing_id: str, tasks: list) -> str:
@@ -198,7 +217,15 @@ async def lookup_listing_by_address(
     This is a helper for when users reference listings by address
     instead of ID.
     """
-    context = ctx.context
+    return await _get_task_status_impl(
+        ctx,
+        listing_id,
+        status,
+        assignee,
+        since,
+        limit,
+        page_token,
+    )
     
     try:
         # Search listings by address

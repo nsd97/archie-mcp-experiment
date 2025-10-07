@@ -17,6 +17,7 @@ from src.matrix_adapter import create_matrix_adapter
 async def main():
     """Run the Matrix listener."""
     print("🎧 Starting Matrix listener...")
+    print("=" * 60)
     
     # Check for required environment variables
     required_vars = [
@@ -25,9 +26,20 @@ async def main():
         "SQS_QUEUE_URL"
     ]
     
+    print("📋 Checking environment variables:")
+    for var in required_vars:
+        value = os.getenv(var)
+        if value:
+            if var == "MATRIX_ACCESS_TOKEN":
+                print(f"   ✅ {var}: {value[:10]}...")
+            else:
+                print(f"   ✅ {var}: {value}")
+        else:
+            print(f"   ❌ {var}: NOT SET")
+    
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
-        print(f"❌ Missing required environment variables: {', '.join(missing)}")
+        print(f"\n❌ Missing required environment variables: {', '.join(missing)}")
         print("\nPlease set:")
         for var in missing:
             print(f"  export {var}=...")

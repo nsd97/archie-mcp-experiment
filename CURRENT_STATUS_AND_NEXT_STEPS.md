@@ -1,6 +1,6 @@
 # Current Status & Next Steps
 
-**Date:** October 5, 2025  
+**Date:** October 5, 2025
 **Status:** ✅ Implementation Complete — Ready for Docker Testing
 
 ---
@@ -21,8 +21,8 @@
 - ✅ LocalStack running (DynamoDB, SQS, S3, CloudWatch)
 - ✅ Backend tables initialized
 - ✅ Sample data seeded
-- ⚠️  Agent queues need to be created (Docker will do this)
-- ⚠️  Matrix tables need to be created (Docker will do this)
+- ⚠️ Agent queues need to be created (Docker will do this)
+- ⚠️ Matrix tables need to be created (Docker will do this)
 
 ---
 
@@ -36,13 +36,14 @@
   - CloudWatch: running
 
 ### Services Not Yet Started
-- ⏸️  Backend Node.js API (port 3000)
-- ⏸️  Agent Service (port 8000)
-- ⏸️  Matrix Synapse (port 8008)
-- ⏸️  Queue consumers (3 services)
+- ⏸️ Backend Node.js API (port 3000)
+- ⏸️ Agent Service (port 8000)
+- ⏸️ Matrix Synapse (port 8008)
+- ⏸️ Queue consumers (3 services)
 
 ### Why Tests Fail
 Tests are failing because:
+
 1. Tests try to connect to real AWS (not LocalStack) — env var issue in test setup
 2. Some tests need OPENAI_MODEL env var set differently in test context
 3. Agent services aren't running yet (that's okay, backend tests don't need them)
@@ -53,11 +54,13 @@ Tests are failing because:
 
 ### Option A: Docker Deployment (Recommended)
 
+**Note:** Commands assume the project lives at `/Users/noahdeskin/ArchieOS Backend.worktrees/Noahs-agetnic-experiment`; adjust if your directory differs.
+
 This is the **easiest and most reliable** way since all dependencies are in containers:
 
 ```bash
 # 1. Start all services (this creates queues/tables automatically)
-cd /Users/noahdeskin/ArchieOS\ Backend.worktrees/Noahs-agetnic-experiment
+cd "/Users/noahdeskin/ArchieOS Backend.worktrees/Noahs-agetnic-experiment"
 docker-compose -f docker-compose.yml -f docker-compose.agents.yml up
 
 # This will start:
@@ -101,7 +104,7 @@ To get tests passing:
 ```bash
 # Tests expect LocalStack to be running (✅ already is)
 # Run tests:
-cd /Users/noahdeskin/ArchieOS\ Backend.worktrees/Noahs-agetnic-experiment
+cd "/Users/noahdeskin/ArchieOS Backend.worktrees/Noahs-agetnic-experiment"
 npm test
 
 # Some tests will still fail due to:
@@ -162,7 +165,7 @@ npm test
 ### Terminal 1: Start Services
 
 ```bash
-cd /Users/noahdeskin/ArchieOS\ Backend.worktrees/Noahs-agetnic-experiment
+cd "/Users/noahdeskin/ArchieOS Backend.worktrees/Noahs-agetnic-experiment"
 docker-compose -f docker-compose.yml -f docker-compose.agents.yml up
 ```
 
@@ -185,7 +188,7 @@ curl -X POST http://localhost:8008/_matrix/client/r0/register \
 ### Terminal 3: Matrix Listener
 
 ```bash
-cd /Users/noahdeskin/ArchieOS\ Backend.worktrees/Noahs-agetnic-experiment/agents
+cd "/Users/noahdeskin/ArchieOS Backend.worktrees/Noahs-agetnic-experiment/agents"
 
 export MATRIX_HOMESERVER_URL=http://localhost:8008
 export MATRIX_ACCESS_TOKEN=syt_YourTokenFromAbove

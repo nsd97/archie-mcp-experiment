@@ -173,11 +173,11 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
       }
 
       // Apply authorization filters
-      tasks = tasks.filter((t) => canSeeTask(userCtx, t));
+      tasks = tasks.filter((t) => canSeeTask(userCtx, t.task_id));
 
       // Pagination
       const limit = query.limit || 20;
-      const startIdx = query.page_token ? parseInt(query.page_token) : 0;
+      const startIdx = query.page_token ? parseInt(query.page_token as string, 10) : 0;
       const paginatedTasks = tasks.slice(startIdx, startIdx + limit);
       const nextPageToken =
         startIdx + limit < tasks.length ? String(startIdx + limit) : undefined;
@@ -222,7 +222,7 @@ export default async function v2TasksRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: "Task not found" });
       }
 
-      if (!canSeeTask(userCtx, task)) {
+      if (!canSeeTask(userCtx, task.task_id)) {
         return reply.status(403).send({ error: "Unauthorized" });
       }
 
